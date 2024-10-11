@@ -84,6 +84,32 @@ Kerberos s'interface avec Hadoop.
 On s'identifie et on demande un ticket. 
 Ce ticket nous permet d'accéder aux ressources (typiquement les noeuds d'un groupe). 
 
+### Enchainer les jobs 
+
+
+#### Apache Airflow 
+
+Airflow est un gestionnaire de taches en général. 
+Il marche par DAG (graphe orienté acyclique) codé en Python: 
+1. on construit un DAG avec ses paramètres 
+2. on ajoute des taches (lance un opérateur bash, lance un opérateur truc)
+3. On lit les taches dans le DAG, par exemple `t1 >> [t2, t3]` qui est que quand t1 est finie en succès, on lance t2 et t3 en parallèle. De même `t2 << t1` signifie que t2 se lance quand t1 est finie en succès.
+
+Le principe est d'ajouter des _providers_ qui acceptent des déclenchements de taches. 
+On peut alors utiliser les principales briques de l'écosystème Hadoop: 
+* Apache HDFS pour détecter par exemple qu'un fichier est dans un répertoire 
+* Apache Spark pour lancer des traitements
+* Apache Hive pour des requêtes 
+
+Pour exécuter Airflow sur un cluster, on peut le faire gérer par YARN.
+
+#### Apache Oozie
+
+Apache Oozie est un gestionnaire de taches spécifique à Hadoop. 
+Sa configuration s'ajoute au fichier `core-site.xml`.  
+Il permet de lancer des taches (nommées actions) de type Spark, Hive, Shell, Sqoop, ssh, etc. 
+Le principe est d'écrire un fichier XML, avec des noeuds nommés `<action name=${node name}>`
+On gère ensuite avec des `<ok to="${node name}">` ou `<error to="${node name}">`. 
 
 ### Interface pour les opérations 
 
@@ -102,7 +128,7 @@ Le principe général est de stocker la donnée en fichiers sur HDFS et d'exécu
 Des formats de fichier sont plus avantageux en fonction des cas d'usage: 
 * Le format _Parquet_ est compressé (moins d'espace), organisé en colonnes (plus intéressant que par lignes pour les requêtes analytiques).
 * Le format _ORC_ suit la même logique et a été développé indépendamment de Parquet à peu près au même moment 
-* Le format _RCFile* utilise une méthode de stockage optimisée pour les tables en ligne puis colonne. 
+* Le format _RCFile_ utilise une méthode de stockage optimisée pour les tables en ligne puis colonne. 
 * Le format _Avro_ est un format de fichier. On décrit ce qu'on veut stocker dans ces fichiers, et on peut générer de quoi lire et écrire de la donnée dans un langage (C, C#, Golang) à partir de cette description
 
 
@@ -135,3 +161,27 @@ Les trois opérations sont:
 1. Put: mettre une clé dans une table, dans une column family et une colonne une certaine valeur: `put clé cf:colonne value`
 2. Get: récupérer dans une table les valeurs associées à une clé donnée. 
 3. Scan: entre deux clés possibles, récupérer toutes les valeurs (cf:col:value)
+
+
+### Transformer la donnée 
+
+#### Apache Spark
+
+Le propos ici est un rapide survol. 
+C'est un peu le couteau suisse de la manipulation des données. 
+Il permet de lire des données de fichiers, de bases (jdbc). 
+Ensuite, en code ou en SQL, on les transforme. 
+Finalement, on peut écrire les données transformées. 
+YARN gère les ressources dont il a besoin. 
+
+#### Apache PIG 
+
+Moins utilisé, mentionnons le. 
+Sa dernière release date de 2017. 
+Le principe est d'avoir un langage de script qui transforme la donnée. 
+
+```
+A = load 'passwd' using PigStorage(':');  -- load the passwd file 
+B = foreach A generate $0 as id;  -- extract the user IDs 
+store B into 'id.out';  -- write the results to a file name id.out
+```
