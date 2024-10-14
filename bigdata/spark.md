@@ -34,8 +34,25 @@ ATTENTION:
 En fait, le _driver_ coordonne les _executors_. 
 Plusieurs executors peuvent être portés par le même worker.
 En fonction de la demande (affichage des N premières lignes d'un calcul par exemple), le driver peut collecter les données des executors pour les merger et les servir à l'utilisateur.
-L'objet qui synchronise les taches est une _SparkSession_. 
-Il s'appuie sur les paramètres spark qui sont le _spark context_.
+Le _spark context_ définit les propriétés du job spark. 
+
+```
+conf = SparkConf().setAppName(appName).setMaster(master)
+sc = SparkContext(conf=conf)
+```
+
+A ne pas confondre avec la `SparkSession` qui est une session pour faire du spark SQL: 
+
+```
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("test") \
+    .config("spark.some.config.option", "some-value") \
+    .getOrCreate()
+	
+df = spark.read.json("data.json")
+df.show()
+```
 
 #### Application: configurer le lancement d'un job spark 
 
