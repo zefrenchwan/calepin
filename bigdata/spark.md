@@ -146,3 +146,110 @@ Les opérations qui provoquent un shuffle sont:
 * `repartition(int)`, `coalesce(n)` (qui réduit à n partitions) et `repartitionAndSortWithinPartitions(partitioner)` (qui trie par clé dans chaque partition)
 * les `join` (et les `cogroup` (un group by même clé qui groupe deux rdd)
 * toutes les opérations `...ByKey` (groupByKey, reduceByKey)
+
+## Configuer les jobs Spark 
+
+La configuration de Spark se fait à au moins trois endroits: 
+1. (yarn en général) `yarn-site.xml` à vérifier si YARN est le ressource manager de Spark pour voir les allocations par défaut 
+2. (spark) les propriétés générales dans le répertoire d'installation de Spark 
+3. (spark job) les propriétés du job en dernier lieu 
+
+Voici une partie de la configuration Spark par défaut: 
+
+```
+spark.master                     yarn
+spark.submit.deployMode          client
+spark.driver.memory              512m
+spark.executor.memory            512m
+spark.yarn.am.memory             1G
+spark.eventLog.enabled           true
+spark.eventLog.dir               hdfs://spark-yarn-master:8080/spark-logs
+spark.history.provider           org.apache.spark.deploy.history.FsHistoryProvider
+spark.history.fs.logDirectory    hdfs://spark-yarn-master:8080/spark-logs
+spark.history.fs.update.interval 10s
+spark.history.ui.port            18080
+```
+
+
+On peut voir [les propriétés](https://spark.apache.org/docs/3.5.1/configuration.html#spark-properties) du job sur son web ui à ` http://<driver>:4040` dans l'onglet _Environment_.  
+
+### Les ressources matérielles
+
+Spark détaille ces informations dans sa [documentation](https://spark.apache.org/docs/latest/hardware-provisioning.html). 
+
+1. Au moins 8 Gb de mémoire, pas plus de 75% de la mémoire de l'hôte pour en laisser à l'OS
+2. Maximum 200 Gb (au delà la JVM ne réagit pas très bien)
+3. Idéalement 4 à 8 disques par noeud, pas de RAID
+4. Idéalement des cartes réseau à 10Gb/s 
+5. 8 à 16 cores par machine 
+
+### La gestion des exécuteurs (le scheduling)
+
+Quand plusieurs jobs sont lancés, l'allocation des ressources dépend du ressource manager par définition. 
+On va se concentrer sur YARN. 
+Quand un job est soumis, la méthode de gestion par défaut est d'allouer toutes les ressources possibles tout le temps du job. 
+On peut régler les paramètres avec: `--num-executors` d'une part et `--executor-memory` , `--executor-cores` d'autre part
+
+Après, évidemment, on peut définir la queue YARN dans laquelle le job va tourner, donc les propriétés YARN attachées. 
+Par exemple: 
+
+```
+spark-submit \
+  --class org.apache.spark.examples.SparkPi \
+  --queue <queue_name> \
+  --master yarn \
+  --deploy-mode cluster \
+  --num-executors 1 \
+  --driver-memory 512m \
+  --executor-memory 512m \
+  --executor-cores 1 \
+  /usr/hdp/current/spark2-client/examples/jars/spark-examples_*.jar 10
+```
+
+Enfin, on peut définir des stratégies au niveau des stages. 
+
+### Les propriétés de la JVM 
+
+De manière générale, les propriétés java sont définies avec:
+* spark.driver.extraJavaOptions 
+* spark.executor.extraJavaOptions
+
+On les rajoute au moment de la création de la conf spark. 
+
+#### Statistiques sur le GC 
+On aimerait voir comment le GC se comporte et s'il pénalise les jobs.
+Il faut donc ajouter en options Java: `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps`
+
+#### Le GC recommandé
+
+On prendra `-XX:+UseG1GC`
+
+### Les sérialisations
+
+La sérialisation permet à Spark de déplacer des objets d'un executor à l'autre. 
+La valeur par défaut est le sérialiseur Java standard. 
+D'autres alternatives sont bien plus rapides, telles que le KryoSerializer. 
+
+`sc.setSystemProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")`
+
+### Les propriétés des jobs 
+
+Il en existe des dizaines dont le détail est [ici](https://spark.apache.org/docs/latest/configuration.html). 
+On peut quasiment tout configurer. 
+
+## Monitoring des jobs sparks 
+
+### Les informations sur l'UI
+
+Quand un spark context tourne sur une machine, il lance aussi une web ui, accessible sur le port 4040. 
+Elle donne donc des informations sur le job en cours. 
+L'autre cas est de comprendre après coup pourquoi un job est long. 
+Garder ces informations après coup est la responsabilité du _spark history server_. 
+Mais pour cela, il faut avoir activé certaines propriétés pour voir les logs et avoir défini où les stocker. 
+Voir à ce sujet la page principale [ici](https://spark.apache.org/docs/latest/monitoring.html). 
+
+### Les logs YARN 
+
+On se place dans le cas d'un ressource manager qui est YARN.
+Par définition, les applications sont accessibles à YARN, donc un 
+`yarn logs -applicationId <app ID>` va donner des informations. 
