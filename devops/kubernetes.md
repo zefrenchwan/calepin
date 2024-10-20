@@ -10,6 +10,8 @@ Il sert principalement à:
 * _gérer les ressources_ consommées par ces applications conteneurisées en leur allouant plus ou moins de ressources (scale up et scale down)
 * les monitorer et déléguer leur gestion (redémarrage, blocage)
 
+Il est efficace sur du cloud (GKE pour GCP) ou on-premise (sur un cluster géré par Kubernetes).
+
 ## Pourquoi l'utiliser ?
 
 Une application va tourner avec un langage, une version des librairies, voire sur un système d'exploitation spécifique. 
@@ -138,6 +140,7 @@ Ils formeraient le plus petit tout cohérent qu'on déploie, toute la partie ét
 Son environnement d'exécution inclut ses volumes, la mémoire partagée, la couche réseau. 
 Un pod avec une unique application a sa mémoire, son réseau, etc. 
 Mais tous les conteneurs du même pod partagent la mémoire et le réseau. 
+En particulier, dans le même pod, deux applications sur des ports différents se contactent via `localhost`.
 Par conséquent, on ne peut pas ajouter un conteneur dans un pod pour la mise à l'échelle. 
 Un pod est un objet immutable. 
 On ne manipule que des pods pour les mises à l'échelle. 
@@ -164,6 +167,8 @@ Ils proposent un réseau utilisable avec des IP à l'externe fixes, et en intern
 
 ## Usage 
 
+### Interagir avec le cluster 
+
 L'outil de base est la console avec la commande _kubectl_. 
 Son principe général est: `kubectl [commande] [TYPE] [NOM] [flags]` avec: 
 * les commandes possibles sont notamment: create, get, describe, delete
@@ -175,6 +180,62 @@ Il utilise un répertoire de configuration, `.kube`, qui contient:
 * les contextes, qui sont un cluster qu'on manipule avec un compte utilisateur 
 
 On peut voir cette configuration avec la commande `kubectl config current-context`
+
+
+Il existe bien sûr des outils qui facilitent l'usage de l'api server, par exemple [k9s](https://k9scli.io/). 
+
+
+### Les fichiers de manifeste
+
+Le principe est d'utiliser un fichier (_manifest file_) le plus lisible possible (_empathy as code_, une configuration claire facilite la passation de connaissance). 
+Un fichier comprend plusieurs zones: 
+* `kind`: ce qu'on définit (par exemple, un _pod_, ou un _deployment_)
+* `apiVersion`: la version de l'api server, _v1_ souvent. 
+* `metadata`: les propriétés de l'objet, par exemple son _name_ ou ses _labels_
+* `spec`: ce qui est attendu, pour les pods par exemple ce que le cluster doit présenter
+* `clusters` qui est la liste des clusters gérés (name, server et certificate-authority-data sont les éléments pertinents)
+* `users` qui est la liste des utilisateurs et leur certificat
+
+#### Exemple: pour un pod
+
+```
+kind: Pod
+apiVersion: v1
+metadata:
+  name: front-server
+  labels:
+    zone: prod
+    version: v1
+spec:
+  containers:
+  - name: apiserver
+    image: apiserver/project:1.0
+    ports:
+    - containerPort: 8000
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 1.5
+      limits:
+        memory: 512Mi
+        cpu: 2.5
+```
+
+__ATTENTION: pour un pod, son hostname est son nom.__
+Ici, le hostname sera `front-server`. 
+Sinon, remarquons `requests` et `limits` pour les ressources. 
+Le premier est le min, le second le max.  
+
+Pour appliquer ce fichier, disons pod.yml: `kubectl apply -f pod.yml` et pour le vérifier: `kubectl get pods`. 
+Sur cette dernière commande, on trouvera `spec` pour l'état voulu, et `status` pour l'état réel.
+
+### Patterns de gestion des pods
+
+On associe souvent un pod à un conteneur.
+Il existe cependant deux patterns implémentés par k8s: 
+* _init_: avoir un conteneur qui tourne une seule fois au lancement et avant le contenur principal. Le principe est qu'il prépare l'autre application (création de base, contact d'une API tiers pour fournir les données de démarrage, etc) 
+* _sidecar_: une autre application qui tourne dans le pod, tout au long de sa vie 
+
 
 ## Sources
 
