@@ -18,3 +18,8 @@ Sources:
 * [DSA selon vie publique](https://www.vie-publique.fr/eclairage/285115-dsa-le-reglement-sur-les-services-numeriques-ou-digital-services-act)
 
 ### L'état du marché 
+
+Présence en France de:
+* [Oodrive](https://www.oodrive.com/fr/)
+* [NumSpot](https://www.lemondeinformatique.fr/actualites/lire-cloud-de-confiance-numspot-lancera-ses-offres-mi-2024-92300.html)
+* [OVHCloud](https://www.ovhcloud.com/fr/)
