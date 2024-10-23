@@ -50,8 +50,8 @@ Il y a plusieurs façons de délivrer des messages:
 | Au moins un | Oui | Non |
 | EXACTEMENT un | Non | Non |
 
-
-Kafka garantit la livraison de messages _exactly once_ sous conditions qu'on va creuser ensuite.  
+Avec l'usage de transactions, on peut arriver à du _exactly once_ avec Kafka. 
+Sinon, par simple configuration, on atteint le _at least once_.  
 
 ### Partition: leader et followers
 
@@ -103,7 +103,7 @@ Sur l'API Java, le principe est de fabriquer un `KafkaProducer` et d'envoyer des
 Il faut que K et V soient sérialisables, de sorte qu'on construit un producteur avec de quoi sérialiser les clés et les valeurs. 
 Il permet de: 
 1. Envoyer des messages. En interne, Kafka commence par sérialiser le message, puis le _Partitioner_ calcule la partition cible (si elle n'est pas précisée). Le retour de `send` est un `Future<RecordMetadata>` pour savoir quel offset, quelle partition. Sinon, c'est une exception. __Donc, un Future veut bien dire que le send est par défaut asynchrone. Pour attendre le résultat, on utilise get sur le Future.__
-2. Gérer des transactions de messages. On y reviendra, mais le principe est que le producteur écrit dans des partitions de manière transactionnelle. En fonction du niveau d'isolation de lecture des consommateurs, les offsets correspondant seront visibles uniquement si la transaction réussit.
+2. Gérer des transactions de messages. Le principe est que le producteur écrit dans des partitions de manière transactionnelle. En fonction du niveau d'isolation de lecture des consommateurs, les offsets correspondant seront visibles uniquement si la transaction réussit.
 3. Exposer des métriques de fonctionnement 
 
 #### Utilisation de base 
@@ -272,6 +272,7 @@ for(Map.Entry<TopicPartition,OffsetAndTimestamp> entry: offsetMap.entrySet()) {
     consumer.seek(entry.getKey(), entry.getValue().offset()); 
 }
 ```
+
 
 ## Sources: 
 * [Le site Apache Kafka](https://kafka.apache.org/documentation/#gettingStarted)
