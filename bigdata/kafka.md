@@ -161,6 +161,7 @@ On définit le schéma Avro, on fabrique un `GenericRecord` depuis ce schéma, e
 
 ### Côté consommateur 
 
+
 #### Lien consommateur - partition 
 Avoir un seul consommateur par topic peut ne pas suffire. 
 On a alors besoin de mieux répartir la charge avec un groupe de consommateurs qui se partagent les partitions du topic. 
@@ -191,19 +192,88 @@ Si ce timeout est long, l'offset aura beaucoup bougé dans l'intervalle de temps
 
 _En fait, cet id garantit que quand un consommateur perd sa connection au groupe, Kafka lui redonne les mêmes informations car il a toujours le même id._
 
+#### Configuration des consommateurs 
+
+On peut régler: 
+* les paramètres du poll (taille max ramenée par exemple)
+* les timeouts
+* l'auto commit ou pas (`enable.auto.commit`), par défaut à true 
+* les id (client, group)
+
+#### Gestion des offsets 
+
+C'est bien sûr l'opération principale, la raison d'être du consommateur. 
+__A chaque appel, le poll renvoie les messages non déjà lus par le groupe du consommateur.__ 
+Kafka ne gère pas le commit message par message, mais le commit de l'offset de la partition. 
+On parle d'ailleurs de _offset commit_. 
+
+Le commit est automatique par défaut, et il est réalisé à fréquence fixe, configurée avec `auto.commit.interval.ms`. 
+On peut le gérer manuellement et on peut réaliser un commit de manière synchrone ou asynchrone. 
+On peut même réaliser un commit à un offset spécifique. 
+
+__Même en présence d'un système transactionnel, il est possible de traiter deux fois les mêmes messages__. 
+Imaginons alors le scénario suivant: 
+1. Le consumer commit l'offset 10 de la partition en cours 
+2. Il poll et reçoit les offsets 11 à 20
+3. Il crash et ce crash provoque un _rebalancing_ 
+4. Un nouveau consommateur rejoint le groupe 
+5. Son poll lui renvoie les messages 11 à 20 (pas commités) et les suivants
+
+__De la même manière, même avec un système transactionnel, on peut perdre des messages__. 
+Le scénario est le suivant: 
+1. Le consumer reçoit les offsets 11 à 20 et commit l'offset 20 dans la foulée
+2. Il commence à traiter le message 11 et tout va bien, il attaque le 12
+3. Il crash et son crash provoque un rebalancing 
+4. Un nouveau consommateur arrive et poll, il reçoit donc les offsets 21 et suivants (puisque le 20 est validé)
+5. En conséquence, les messages 12 à 20 sont commités mais pas traités, donc perdus 
+
+
+Pour gérer ce genre de situation, il est possible de placer un `ConsumerRebalanceListener` au moment du `subscribe`. 
+Le cas d'usage est d'intércepter la perte d'ownership de la partition et de commit le dernier offset validé. 
+
+
 #### Exemple concret: 
 
 ```
 Properties props = new Properties();
-props.put("bootstrap.servers", "broker1:9092,broker2:9092");
-props.put("group.id", "CountryCounter");
-props.put("key.deserializer",
-    "org.apache.kafka.common.serialization.StringDeserializer");
-props.put("value.deserializer",
-    "org.apache.kafka.common.serialization.StringDeserializer");
-
-KafkaConsumer<String, String> consumer =
-    new KafkaConsumer<String, String>(props);
-	
-consumer.subscribe(Collections.singletonList("customerCountries"));
+props.setProperty("bootstrap.servers", "localhost:9092");
+props.setProperty("group.id", "test");
+props.setProperty("enable.auto.commit", "false");
+props.setProperty("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+props.setProperty("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
+consumer.subscribe(Arrays.asList("foo", "bar"));
+final int minBatchSize = 200;
+List<ConsumerRecord<String, String>> buffer = new ArrayList<>();
+while (true) {
+ ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+ for (ConsumerRecord<String, String> record : records) {
+	 buffer.add(record);
+ }
+ if (buffer.size() >= minBatchSize) {
+	 insertIntoDb(buffer);
+	 consumer.commitSync();
+	 buffer.clear();
+ }
+}
 ``` 
+
+On peut aussi lire la donnée depuis un certain temps: 
+```
+Long oneHourEarlier = Instant.now().atZone(ZoneId.systemDefault())
+          .minusHours(1).toEpochSecond();
+Map<TopicPartition, Long> partitionTimestampMap = consumer.assignment()
+        .stream()
+        .collect(Collectors.toMap(tp -> tp, tp -> oneHourEarlier)); 
+Map<TopicPartition, OffsetAndTimestamp> offsetMap
+        = consumer.offsetsForTimes(partitionTimestampMap); 
+
+for(Map.Entry<TopicPartition,OffsetAndTimestamp> entry: offsetMap.entrySet()) {
+    consumer.seek(entry.getKey(), entry.getValue().offset()); 
+}
+```
+
+## Sources: 
+* [Le site Apache Kafka](https://kafka.apache.org/documentation/#gettingStarted)
+* [L'API de Kafka](https://kafka.apache.org/38/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html) 
+* Kafka, The definitive guide, second edition, de Shapira, Palino, Sivaram et Petty
