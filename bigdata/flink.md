@@ -80,6 +80,134 @@ Flink s'inscrit logiquement dans une architecture event driven et offre:
 * la migration ou le redéploiement sans perte de l'état 
 * Flink gère aussi les batchs 
 
+## Les bases sur les moteurs de stream
+
+C'est la partie théorique. 
+
+### Dataflows graphs 
+
+Les flux de données se théorisent comme des graphes acycliques orientés: 
+* les noeuds initiaux sont les _sources_ de données 
+* les noeuds finaux sont les destinations (_sinks_) de données 
+* les noeuds intermédiaires sont les _opérateurs_ sur les données 
+* les flêches sont les dépendances pour les opérations. Leur valeur est la donnée transportée
+
+Par exemple: 
+```
+SOURCE      DONNEES         OPERATIONS              DONNEES       SINK 
+[Kafka] === "axj54dsf" ==> [Avro deserilization] == "Bonjour" ==> [Base de données]
+```
+
+
+Ce diagramme logique est ensuite interprété par le moteur de stream qui va créer les taches idoines pour les traitemens: 
+* les opérateurs donnent lieu à des taches. Pour traiter de gros volumes, plusieurs taches peuvent réaliser une opération (notion de _task parallelism_)
+* chaque tache traite donc une sous partie des données de la source suivant un critère de partition (notion de _data partition_) 
+
+Plusieurs stratégies existent pour l'échange de données entre les workers: 
+* _forward strategy_: localité d'abord, le worker qui traite une tâche gère préférentiellement la suivante pour minimiser le déplacement de donnée 
+* _broadcast strategy_: le worker duplique la donnée et l'envoie à tous les workers qui gèrent l'opération suivante. Evidemment très couteux
+* _key based strategy_: la même clé est traitée par la même tache. 
+* _random strategy_: répartition aléatoire de la donnée 
+
+
+Comment mesurer qu'on a bien configuré notre outil ? 
+Traiter un flux non borné d'événements (_unbounded data stream_, parfois juste _data stream_) est une autre façon de penser que par batchs. 
+* au niveau des métriques, plus de notion de temps total de traitement, mais de _latence_ (le temps mis à traiter une donnée) et de capacité d'ingestion en volume (par unité de temps), dit _throughput_. Les deux sont liés: plus la latence est faible, meilleur est le _throughput_.
+* les mesures de performance des sources sont l'_ingress_ (capacité à ingérer un volume par unité de temps) et pour les sinks, l'_egress_.
+
+### Gestion des opérations 
+
+Attention, en général, une opération prend en entrée un itérateur d'événements et renvoie un itérateur d'événements. 
+Dans le cas particulier d'un entrant qui donne un sortant, on parle de transformation. 
+
+Toutes ces opérations peuvent être: 
+* _stateless_: sans état, elles gèrent événement par évenement. Elles sont facilement parallélisables et leur redémarrage est facile 
+* _stateful_: les transformations dépendent des messages reçus précédemment, et potentiellement des suivants aussi. La gestion de leur état les rend plus difficile à paralléliser et à répartir. Par exemple, un calcul de somme, de moyenne ou toute agrégation en général nécessite un état. On parle alors de _rolling agregation_.
+
+
+En général, comme on gère un flux potentiellement non borné, il faut le découper par blocs. 
+Les transformations et les rolling agregations lisent une seule entrée et produisent une seule sortie, avec éventuellement la mise à jour d'un état. 
+D'autres doivent gérer tout un buffer de données pour produire leur résultat. 
+Par exemple, sur une tranche de 5 minutes, on peut vouloir avoir le nombre d'incidents sur tel type de données. 
+Les _windows operations_ coupent ce flux de données en _buckets_ sur lesquels on réalise l'opération. 
+On doit définir comment ce découpage est réalisé, et ce que doit faire l'opérateur avec son bucket. 
+En interne, on parle de _trigger_, c'est à dire la condition qui définit que le bucket est complet et doit être passé en paramètre de la fonction d'évaluation.
+Par exemple, on peut définir des buckets limités à N éléments, ou aux dix dernières secondes. 
+On applique alors comme fonction d'évaluation un count, une somme, une moyenne, etc. 
+Les règles de définition des fenêtres peuvent être: 
+* _tumbling_: nombre fixe d'éléments qui sont dans un seul bucket. Ce nombre est fixé soit en taille (N éléments), soit en temps (1 minute)
+* _sliding_: nombre fixe d'éléments, mais les buckets peuvent se chevaucher. Par exemple, une taille fixe de N éléments, avec les N/2 derniers éléments à chaque fois.
+* _sessions_: on définit un TTL pour la session, et tous les éléments perçus dans la durée de vie de la session sont groupés en un bucket. Bien sûr, on aura une sorte d'ID de session avant de faire le regroupement ! Il y aura donc traitement en parallèle de données de plusieurs sessions
+
+### Gestion du temps 
+
+Imaginons un jeu mobile. 
+L'utlisateur joue et la donnée arrive régulièrement. 
+Il traverse subitement une zone sans réseau mais continue de jouer. 
+A la sortie du tunnel, toute la donnée est envoyée d'un coup. 
+Il y a donc deux temps: 
+1. Le temps perçu par le moteur de stream, ou _processing time_: quand l'opérateur perçoit l'événement 
+2. Le temps de création de l'événement à sa source, ou _event time_: quand l'événement est créé par le système source 
+
+Comme rien ne garantit qu'on finisse par avoir toute la donnée qu'on attend au bout d'un temps fixé, il faut définir arbitrairement une limite de temps après laquelle on estime que c'est perdu. 
+On parle de _watermark_: on attend un délai maximum. Si la donnée arrive avant, elle est lue. Après, elle est perdue. 
+Le compromis est donc: 
+* Pour la rapidité, on prend un petit watermark et on considère le processing time dans les windows
+* Pour la précision, on prend un watermark plus long basé sur l'event time 
+
+
+### Gestion des états 
+
+Avant l'arrivée de moteurs de streams, on réalisait des batchs qui chargeaient des blocs de données. 
+Par exemple, prendre l'activité de la dernière heure et calculer des statistiques ou indicateurs dessus. 
+Cette méthode de batch a aussi comme inconvénient de ne pas réutiliser l'état de la précédente exécution. 
+Quand on lance toutes les 10 minutes un calcul portant sur la dernière heure, c'est une perte d'efficacité. 
+
+
+Les exemples d'opérations avec état sont nombreux: 
+* savoir la température moyenne sur les dix dernières minutes d'un système 
+* déterminer le temps qu'il faut pour avoir 1000 erreurs sur un système 
+* toute opération d'agrégation qu'on découpe en temps ou en nombre 
+
+
+Par contre, gérer un état pose question: 
+* on ne peut pas attendre indéfiniment et laisser l'état trop grossir quitte à saturer la mémoire ou le stockage
+* il faut trouver une façon de gérer les accès concurrents à un même état 
+* il faut le distibuer. Une bonne façon est d'avoir une partition de l'état par clé d'événements 
+* il faut gérer les pannes des taches, voire des workers et savoir repartir d'un état donné 
+
+#### Les pannes 
+
+En général, une tâche réalise son travail en trois étapes: 
+1. lecture et stockage dans un buffer interne 
+2. mise à jour éventuelle de l'état 
+3. calcul et envoi de la sortie de l'opération 
+
+Le problème principal devient ce qu'on appelle les _results guarantees_, c'est à dire maintenir la cohérence de l'état interne. 
+
+
+Quand une tâche plante, il y a trois méthodes: 
+1. _at most once_: la donnée source n'est pas relue, elle est perdue. On ne fait rien, on reprend quand on peut 
+2. _at least once_: la donnée est relue si la tâche plante. Elle a déjà pu être traitée. On prend le risque de la traiter plusieurs fois. Par contre, ce n'est pas que le moteur de streams qui gère ce problème: relire la source depuis un offset fixé doit être possible, ce n'est pas toujours le cas ! 
+3. _exactly once_: la donnée n'est pas perdue, et si elle est relue, l'état interne ne la prend pas en compte. On la traite donc bien une seule fois exactement 
+
+
+Au niveau global, on définit un système qui garantit que la donnée venant de la source est traitée par le sink en mode _exactly once_. 
+Ce n'est pas juste au niveau de la tâche, mais une propriété globale du système. 
+On parle alors de _end to end exactly once_. 
+
+
+## Architecture de Flink 
+
+Il se base sur: 
+* Zookeeper pour la gestion de la haute disponibilité 
+* un support de stockage durable (S3, HDFS) 
+* Un gestionnaire de ressources (YARN, K8S) bien qu'il puisse aussi tourner sur une machine 
+
+
+
+
+
 ## Sources
 
 * Stream processing with Apache Flink (Huesk, Kalavri)
