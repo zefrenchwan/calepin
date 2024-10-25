@@ -398,7 +398,7 @@ Quels types de fenêtres sont possibles ?
 | TYPE DE FENETRE | Description | Chevauchement |
 |-----------------|------------------|------------|
 | Tumbling | Taille fixe | NON |
-| Sliding | Taille fixe | NON |
+| Sliding | Taille fixe | OUI |
 | Session | S'arrête quand rien pendant un temps fixé | NON |
 | Global | Durée infinie à clé fixée | NON (car unique) |
 
