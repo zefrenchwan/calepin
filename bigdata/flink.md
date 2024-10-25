@@ -197,47 +197,176 @@ Ce n'est pas juste au niveau de la tâche, mais une propriété globale du syst�
 On parle alors de _end to end exactly once_. 
 
 
-## Prendre Flink en main 
+## Bien comprendre l'API Data stream 
 
-Déjà, donnons un [exemple tronqué](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/learn-flink/overview/): 
+On va s'attarder sur celle-ci car elle illustre toute la difficulté de travailler avec des flux. 
+On a beaucoup l'habitude de penser un flux comme une liste, mais non seulement le flux nous est imposé (pas de remove ou add), mais il est potentiellement infini (donc le découper en blocs finis est notre responsabilité). 
+Pour donner d'emblée un [exemple](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/overview/): 
 
 ```
-final StreamExecutionEnvironment env =
-		StreamExecutionEnvironment.getExecutionEnvironment();
-// source
-DataStream<String> lines = env.addSource(new FlinkKafkaConsumer<>(...));
-// transformation sans état 
-DataStream<Event> events = lines.map((line) -> parse(line));
-// avec état 
-DataStream<Statistics> stats = events
-	.keyBy(event -> event.id)
-	.timeWindow(Time.seconds(10))
-	.apply(new MyCustomAggregation());
-// sink 
-stats.addSink(new MySink(...));
+import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.util.Collector;
+
+public class WindowWordCount {
+
+    public static void main(String[] args) throws Exception {
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+        DataStream<Tuple2<String, Integer>> dataStream = env
+                .socketTextStream("localhost", 9999)
+                .flatMap(new Splitter())
+                .keyBy(value -> value.f0)
+                .window(TumblingProcessingTimeWindows.of(Time.seconds(5)))
+                .sum(1);
+
+        dataStream.print();
+
+        env.execute("Window WordCount");
+    }
+
+    public static class Splitter implements FlatMapFunction<String, Tuple2<String, Integer>> {
+        @Override
+        public void flatMap(String sentence, Collector<Tuple2<String, Integer>> out) throws Exception {
+            for (String word: sentence.split(" ")) {
+                out.collect(new Tuple2<String, Integer>(word, 1));
+            }
+        }
+    }
+
+}
 ```
 
-Très concrètement, on écrit un programme Flink en définissant un environnement d'exécution (par exemple, un `StreamExecutionEnvironment `). 
-On ajoute une source à cet environnement, puis, depuis cette source, on ajoute transitivement les opérations et les puits. 
-Ces [sources peuvent être](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/overview/) un fichier, un flux réseau, un Kafka, une base de données, un pub sub GCP, etc. 
-On termine le code par un `env.execute()` qui va lancer le découpage en taches et leur exécution. 
+Le principe est de : 
+1. définir l'environnement d'exécution, disons `var env = StreamExecutionEnvironment.getExecutionEnvironment();`
+2. Y ajouter les sources, lier les opérations aux sources, les sinks aux transformations 
+3. Lancer l'exécution, donc le découpage en taches et leur lancement via `env.execute()`
+
 Pour exécuter le programme Flink, on package un jar et on l'envoie à Flink: 
 
 `./bin/flink run examples/streaming/WordCount.jar`
 
 La version longue est [ici](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/overview/). 
 
-### La partie ETL 
+### La gestion du temps
 
-Citons d'emblée les grandes fonctions: 
-* (Stateless) map pour une transformation, flatMap pour lire une valeur et renvoyer un ensemble, filter pour filter de la donnée (habile)
-* (Stateless) keyBy qui envoie dans la même partition les données ayant la même clé (utile pour les agrégations ensuite). On manipule alors des [KeyedStream](https://nightlies.apache.org/flink/flink-docs-release-1.20/api/java/)
- 
+Flink peut tourner en mode batch. 
+Dans ce cas, le flux est fini, donc les notions de min, max, etc ont un sens en soi. 
+
+Sur un flux potentiellement infini (_unbounded data flow_), ça n'a pas de sens. 
+* Il faut découper par tranches, dites _windows_: par durée ou par taille. Soit elles agrègent toutes les données (non keyed), soit elles prennent toute la donnée par clé (_keyed window_). Toutes les données ayant la même clé sont exactement les données de cette _keyed window_.
+* Chacune est fabriquée entre le premier élément arrivant et la condition de fin. Son _trigger_ déclenche le traitement de la _window function_ (par exemple une aggrégation).
+* Le _timestamp_ de l'élément est le temps de l'élément, qui sert à savoir si une window basée sur le temps l'accepte ou pas. En pratique, soit c'est le processing time (l'arrivée dans la tâche), soit l'event time (la création dans la source)
+* _Un watermark est le moment au bout duquel on n'attend plus un élément_, donc l'écart entre le temps de la tâche et le _timestamp_ de l'événement. 
+* On peut toutefois préciser une _lateness_ pour accueillir l'élément entre la watermark et la _lateness_. 
+
+#### La gestion des watermarks 
+
+
+Flink parle bien en temps absolu, en l'occurence en UNIX time. 
+Flink gère deux types d'événements tout au long de son graphe de tâches: 
+1. Les éléments (ou records) qui sont ce qu'on manipule dans un stream. Tous portent un temps: soit l'event time, soit le processing time de ce qui le manipule
+2. des événements donnant le temps au delà duquel tout est censé être là. En l'occurence à intervalle régulier, un watermark de valeur t est émis pour signaler que tout opérateur qui le reçoit peut considérer qu'il a tous les éléments plus vieux que t
+
+__Basiquement, dans un stream, un watermark à t dit que toute donnée qui arrive après t est perdue.__
+
+Toute implémentation de la [_WatermarkStrategy_](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/event-time/generating_watermarks/) répond à deux questions:
+* _TimestampAssigner_: Quel temps prend on pour un record ? Le  _processing time_ ou _l'event time_ ? 
+* _WatermarkGenerator_: Quelle gestion des événements de type Watermark ? L'algorithme de propagation est fixe, mais quand les envoyer ? Suivant quelle modalité ?
+
+Définir la stratégie est obligatoire si on utilise certains types de windows.
+Si l'on utilise des windows sans l'avoir précisé (par exemple une _TumblingEventTimeWindows_), on a un plantage. 
+Flink en effet ne sait pas extraire l'event time d'un record sans plus de précision (et il a raison).
+
+
+Les principales [stratégies implémentées](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/event-time/built_in/) sont: 
+* `WatermarkStrategy.forMonotonousTimestamps()`: la source donne les éléments par ordre de temps croissant
+* `WatermarkStrategy.forBoundedOutOfOrderness(Duration.ofSeconds(10))`: les éléments arrivent dans le désordre, on considère qu'on peut attendre (ici 10 secondes) après la fermeture de la fenêtre pour les traiter quand même
+
+Et voici un exemple: 
+```
+var events = Arrays.asList(
+	new Event(...),
+	new Event(...),
+	...
+);
+
+StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+env.getConfig().setAutoWatermarkInterval(Duration.ofMillis(100).toMillis());
+DataStreamSource<Event> stream = env.fromData(events);
+stream
+	.assignTimestampsAndWatermarks(WatermarkStrategy.<Event>forBoundedOutOfOrderness(Duration.ofMillis(100)).withTimestampAssigner((event, timestamp) -> event.getTime()))
+	.keyBy(Event::getPersonId)
+	.window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(1)))
+	.aggregate(...)
+```
+
+
+Pour une étude détaillée avec exemple, c'est [ici](https://www.galiglobal.com/blog/2021/20210207-Flink-event-time.html), et pour une introduction, [ici](https://medium.com/@ipolyzos_/understanding-watermarks-in-apache-flink-c8793a50fbb8).
+
+
+
+#### Schéma de découpage d'un flux 
+
+Du coup, pour une keyed window, elle se déclare [comme suit](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/operators/windows/#window-assigners): 
+
+```
+stream
+       .keyBy(...)               <-  keyed versus non-keyed windows
+       .window(...)              <-  required: "assigner"
+      [.trigger(...)]            <-  optional: "trigger" (else default trigger)
+      [.evictor(...)]            <-  optional: "evictor" (else no evictor) to remove elements 
+      [.allowedLateness(...)]    <-  optional: "lateness" (else zero)
+      [.sideOutputLateData(...)] <-  optional: "output tag" (else no side output for late data)
+       .reduce/aggregate/apply()      <-  required: "function"
+      [.getSideOutput(...)]      <-  optional: "output tag"
+```
+
+#### Les types de fenêtres 
+
+Il existe donc plusieurs types de windows. 
+__ATTENTION: un élément peut être dans 0, 1 ou plusieurs windows.__
+Les _TimeWindows_ ont un temps de création (le min) et une durée (qui définit donc un max). 
+L'élément est inclus sur la condition de son timestamp. 
+Il faut donc l'avoir configuré pour que le code arrive à fabriquer la tâche. 
+
+
+Quels types de fenêtres sont possibles ? 
+* La _tumbling_ a une taile fixée (disons 5 secondes). Elle se créé, elle se remplit, se déclenche, l'aggrégation est calculée et elle disparait. La suivante se créé au prochain élément, donc aucune ne se chevauche. 
+* la _sliding_ a une durée fixe aussi, mais elle marche avec deux temps (_size_ et _slide_). Chaque window a une durée de size (disons 10 secondes), mais on en créé une nouvelle toutes les _slides_ (disons 5 secondes). Deux peuvent se chevaucher à clé donnée, c'est à dire qu'un même élément peut être dans les deux. 
+* la _session_ tire son nom des sessions comme une session web avec un time out à 1h. Là, sur une durée d, tant qu'on reçoit de la donnée de moins de d par rapport à la précédente, la fenêtre dure. Deux ne peuvent pas se chevaucher à clé donnée. 
+* la _globale_, qui est juste les éléments ayant la même clé, sans autre condition. Elle est unique, donc pas de chevauchement 
+
+| TYPE DE FENETRE | Description | Chevauchement |
+|-----------------|------------------|
+| Tumbling | Taille fixe | NON |
+| Sliding | Taille fixe | NON |
+| Session | S'arrête quand rien pendant un temps fixé | NON |
+| Global | Durée infinie à clé fixée | NON (car unique) |
+
+#### Les fonctions de fenêtres 
+
+Les _window functions_ sont calculées sur les données de la fenêtre quand elle est remplie (déclenchement de son trigger).
+La documentation officielle donne des [exemples détaillés](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/operators/windows/), mais sur le principe:
+
+| Type de fonction | Description |
+|------------------|-------------| 
+| ReduceFunction | Un cas pratique mais particulier d'AggregateFunction |
+| AggregateFunction | Mise à jour dynamique d'un accumulateur | 
+| ProcessWindowFunction | Traite la fenêtre en entier |
+
+
+
 ### Les problématiques d'exécution
 
 Citons le cas du [backpressure](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/monitoring/back_pressure/). 
 Fondamentalement, il s'agit d'un opérateur qui va beaucoup plus lentement que ses prédécesseurs. 
 Les données s'accumulent, ce qui met le cluster en risque. 
+
 
 ## Architecture de Flink 
 
@@ -310,3 +439,4 @@ Le détail de l'usage est [ici](https://nightlies.apache.org/flink/flink-docs-re
 ## Sources
 
 * Stream processing with Apache Flink (Huesk, Kalavri)
+* Le site officiel de Flink, par exemple [ici](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/overview/)
