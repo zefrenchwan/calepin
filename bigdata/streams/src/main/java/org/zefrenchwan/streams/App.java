@@ -1,4 +1,4 @@
-package org.zefrenchwan;
+package org.zefrenchwan.streams;
 
 /**
  * Hello world!

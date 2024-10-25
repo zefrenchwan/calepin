@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 @ExtendWith(MiniClusterExtension.class)
-public class ExampleIntegrationTest {
+public class LocalTest {
 
     @Test
     public void testBasicFilter() throws Exception {

@@ -197,6 +197,37 @@ Ce n'est pas juste au niveau de la tâche, mais une propriété globale du syst�
 On parle alors de _end to end exactly once_. 
 
 
+## Flink en pratique 
+
+Cette partie est un survol avant de rentrer dans le détail de l'API de stream. 
+
+### Les principaux éléments 
+
+Flink se base sur: 
+* Zookeeper pour la gestion de la haute disponibilité 
+* un support de stockage durable (S3, HDFS) 
+* Un gestionnaire de ressources (YARN, K8S) bien qu'il puisse aussi tourner sur une machine 
+
+
+Flink est organisé en modèle _master - workers_:
+* le master gère le dispatcher qui interagit avec le client quand un job est soumis, le ressource manager, et un JobManager par tache. 
+* les workers portent un _TaskManager_. Ils ont des slots pré-réservés qui font tourner les taches. Entre deux workers, des streams échangent de la donnée sérialisée. 
+
+| Nom | Hôte  | Rôle | 
+|-------------|-------------|-------------|
+| Dispatcher | Flink Master | serveur des jobs, UI |
+| Ressource Manager | Flink Master | Lien avec le RM du cluster |
+| Job Manager | Flink Master | Un par job, sheduler et coordonne les checkpoints |
+| Task Manager | Flink Worker | Fait tourner des taches sur ses slots | 
+
+
+A toute fin utile, Flink propose un [glossaire](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/concepts/glossary/). 
+
+
+
+
+
+
 ## Bien comprendre l'API Data stream 
 
 On va s'attarder sur celle-ci car elle illustre toute la difficulté de travailler avec des flux. 
@@ -251,6 +282,29 @@ Pour exécuter le programme Flink, on package un jar et on l'envoie à Flink:
 `./bin/flink run examples/streaming/WordCount.jar`
 
 La version longue est [ici](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/overview/). 
+
+
+### Partitionnement des streams 
+
+Quand Flink reçoit un job, il le découpe en sources, opérations et sinks. 
+Le stream de donnée entre les opérations sera partitionné.
+Une tache est un noeud du graphe physique représentant le moyen d'exécuter les opérations. 
+Un sous-tache est une partie de la tache qui gère une partition indépendamment de ce que font les autres. 
+Leur nombre est appelé _parallelism_ pour un opérateur donné, et il dépend de l'opérateur. 
+Il existe deux types d'opérations: 
+* les _one to one streams_ qui préservent l'ordre et restent sur la même partition 
+* les _redistributing streams_ qui vont changer les partitions. Par exemple un `keyBy`. Attention, l'ordre des éléments n'est plus garanti au niveau de l'opération 
+
+### Traitement des flux avec état (_stateful stream processing_)
+
+Toute opération qui ne dépend pas exclusivement d'un élément mais de l'état des éléments autour est dite avec état (_stateful_). 
+Par exemple: quand on réalise une agrégation sur une window donnée, l'état des valeurs en cours de traitement forme l'état de l'opération. 
+La donnée est traitée localement, par partition. 
+Le thread Flink est choisi par la clé la donnée. 
+Pour garantir un traitement rapide, l'état est toujours lu localement, et il est aussi partitionné par clé. 
+Il peut physiquement aussi bien résider en mémoire que sur disque. 
+
+
 
 ### La gestion du temps
 
@@ -342,7 +396,7 @@ Quels types de fenêtres sont possibles ?
 * la _globale_, qui est juste les éléments ayant la même clé, sans autre condition. Elle est unique, donc pas de chevauchement 
 
 | TYPE DE FENETRE | Description | Chevauchement |
-|-----------------|------------------|
+|-----------------|------------------|------------|
 | Tumbling | Taille fixe | NON |
 | Sliding | Taille fixe | NON |
 | Session | S'arrête quand rien pendant un temps fixé | NON |
@@ -367,55 +421,6 @@ Citons le cas du [backpressure](https://nightlies.apache.org/flink/flink-docs-ma
 Fondamentalement, il s'agit d'un opérateur qui va beaucoup plus lentement que ses prédécesseurs. 
 Les données s'accumulent, ce qui met le cluster en risque. 
 
-
-## Architecture de Flink 
-
-
-### Les principaux éléments 
-
-Il se base sur: 
-* Zookeeper pour la gestion de la haute disponibilité 
-* un support de stockage durable (S3, HDFS) 
-* Un gestionnaire de ressources (YARN, K8S) bien qu'il puisse aussi tourner sur une machine 
-
-
-
-Flink est organisé en modèle _master - workers_:
-* le master gère le dispatcher qui interagit avec le client quand un job est soumis, le ressource manager, et un JobManager par tache. 
-* les workers portent un _TaskManager_. Ils ont des slots pré-réservés qui font tourner les taches. Entre deux workers, des streams échangent de la donnée sérialisée. 
-
-| Nom | Hôte  | Rôle | 
-|-------------|-------------|-------------|
-| Dispatcher | Flink Master | serveur des jobs, UI |
-| Ressource Manager | Flink Master | Lien avec le RM du cluster |
-| Job Manager | Flink Master | Un par job, sheduler et coordonne les checkpoints |
-| Task Manager | Flink Worker | Fait tourner des taches sur ses slots | 
-
-
-A toute fin utile, Flink propose un [glossaire](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/concepts/glossary/). 
-
-
-### Partitionnement des streams 
-
-Quand Flink reçoit un job, il le découpe en sources, opérations et sinks. 
-Le stream de donnée entre les opérations sera partitionné.
-Une tache est un noeud du graphe physique représentant le moyen d'exécuter les opérations. 
-Un sous-tache est une partie de la tache qui gère une partition indépendamment de ce que font les autres. 
-Leur nombre est appelé _parallelism_ pour un opérateur donné, et il dépend de l'opérateur. 
-Il existe deux types d'opérations: 
-* les _one to one streams_ qui préservent l'ordre et restent sur la même partition 
-* les _redistributing streams_ qui vont changer les partitions. Par exemple un `keyBy`. Attention, l'ordre des éléments n'est plus garanti au niveau de l'opération 
-
-### Traitement des flux avec état (_stateful stream processing_)
-
-Toute opération qui ne dépend pas exclusivement d'un élément mais de l'état des éléments autour est dite avec état (_stateful_). 
-Par exemple: quand on réalise une agrégation sur une window donnée, l'état des valeurs en cours de traitement forme l'état de l'opération. 
-La donnée est traitée localement, par partition. 
-Le thread Flink est choisi par la clé la donnée. 
-Pour garantir un traitement rapide, l'état est toujours lu localement, et il est aussi partitionné par clé. 
-Il peut physiquement aussi bien résider en mémoire que sur disque. 
-
-
 ### Checkpoints et savepoints
 
 #### Savepoints: l'utilisateur sauvegarde l'état pour une manipulation du job
@@ -435,6 +440,8 @@ Quand une tache plante, il revient à son dernier checkpoint et recommence le tr
 Il a donc besoin régulièrement de stocker cette donnée de manière durable. 
 Concrètement, c'est une propriété de l'environnement, désactivée par défaut.
 Le détail de l'usage est [ici](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/fault-tolerance/checkpointing/)
+
+
 
 ## Sources
 
