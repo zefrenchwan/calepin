@@ -17,10 +17,17 @@ public class ExampleIntegrationTest {
     @Test
     public void testBasicFilter() throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(2);
         DataStreamSource<Integer> source = env.fromData(Arrays.asList(1,2,3));
         List<Integer> values = source.filter(x -> x != 2).executeAndCollect(31);
         Assertions.assertEquals(Arrays.asList(1,3), values);
+    }
+
+    @Test
+    public void testBasicMap() throws Exception {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        DataStreamSource<Integer> source = env.fromData(Arrays.asList(1,2,3));
+        List<Integer> values = source.map(x -> x * 2).executeAndCollect(31);
+        Assertions.assertEquals(Arrays.asList(2,4,6), values);
     }
 
 }
