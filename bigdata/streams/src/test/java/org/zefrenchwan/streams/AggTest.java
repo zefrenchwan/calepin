@@ -16,6 +16,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
 import org.apache.flink.test.junit5.MiniClusterExtension;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -52,6 +53,7 @@ public class  AggTest {
 
         result.print();
         List<Long> reduction = result.executeAndCollect(1000);
-        System.out.println(reduction);
+        Long finalCount = reduction.stream().reduce(0L, (a,b) -> a+b);
+        Assertions.assertEquals(3L, finalCount);
     }
 }
