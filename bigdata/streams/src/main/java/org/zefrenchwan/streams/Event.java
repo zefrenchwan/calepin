@@ -92,4 +92,8 @@ public class Event {
         return true;
     }
 
+    @Override
+    public String toString() {
+        return "[Event: id = " + this.id + " from " + this.source  + " ]";
+    }
 }
