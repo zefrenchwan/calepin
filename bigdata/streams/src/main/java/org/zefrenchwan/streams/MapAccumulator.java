@@ -6,16 +6,17 @@ import java.util.Map.Entry;
 import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.api.java.tuple.Tuple2;
 
-public class MapAccumulator implements Accumulator<Tuple2<Long, String>, TreeMap<String,Long>> {
+public class MapAccumulator implements Accumulator<Tuple2<String, Long>, TreeMap<String,Long>> {
 
     private final TreeMap<String, Long> values = new TreeMap<>();
 
     @Override
-    public void add(Tuple2<Long, String> value) {
-        if (value != null && value.f1 != null) {
-            final long previous = this.values.getOrDefault(value, 0L);
-            final long current = value.f0;
-            values.put(value.f1,previous + current);
+    public void add(Tuple2<String, Long> value) {
+        if (value != null && value.f0 != null) {
+            final String key = value.f0;
+            final long previous = this.values.getOrDefault(key, 0L);
+            final long result = previous + 1;
+            values.put(key,result);
         }
     }
 
@@ -30,7 +31,7 @@ public class MapAccumulator implements Accumulator<Tuple2<Long, String>, TreeMap
     }
 
     @Override
-    public void merge(Accumulator<Tuple2<Long, String>, TreeMap<String, Long>> other) {
+    public void merge(Accumulator<Tuple2<String, Long>, TreeMap<String, Long>> other) {
         for (Entry<String, Long> entry: other.getLocalValue().entrySet()) {
             final String key = entry.getKey();
             final long value = entry.getValue();
@@ -40,9 +41,15 @@ public class MapAccumulator implements Accumulator<Tuple2<Long, String>, TreeMap
     }
 
     @Override 
-    public Accumulator<Tuple2<Long, String>, TreeMap<String,Long>> clone() {
+    public Accumulator<Tuple2<String, Long>, TreeMap<String,Long>> clone() {
         MapAccumulator result = new MapAccumulator();
         result.values.putAll(this.values);
         return result;
     }   
+
+    public MapAccumulator copy() {
+        MapAccumulator other = new MapAccumulator();
+        other.values.putAll(this.values);
+        return other;
+    }
 }
