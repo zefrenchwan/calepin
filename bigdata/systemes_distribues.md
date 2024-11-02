@@ -103,6 +103,25 @@ Par contre, la mise à l'échelle (_scaling_) n'est pas la même en fonction de 
 En conséquence, les debug est bien plus compliqué que sur une application unique. 
 Les équipes ont également une tendance à trop découper les microservices (et le réseau est beaucoup trop sollicité). 
 
+### Utiliser Ambassador pour cacher la complexité des microservices
+
+Pour réduire la complexité, il existe plusieurs patterns. 
+Certains sont spécifiques aux microservices (Ambassador), d'autres non (Adapter). 
+
+_Ambassador_ consiste à avoir un composant entre un service et l'extérieur, pour gérer des problèmes que le service n'a pas à connaitre: 
+* Une implémentation peut gérer les retries, le monitoring, la sécurité
+* Une autre peut être contactée par un client pour rediriger ensuite vers le bon microservice, comme une sorte de façade 
+* Enfin, une autre peut faire office d'adapter en liant une interface attendue à une implémentation fournie par le service 
+
+```
+| Service | <---> | Ambassador | <-----> | Client |
+
+| Client | <---> | Ambassador | <-----> | Microservice 1 |
+                                <-----> | Microservice 2 |
+								<-----> | Microservice 3 |
+```
+
+
 ### Répartir la charge avec un _load balancer_
 
 Le principe est de faire traiter les requêtes par différentes machines. 
@@ -140,6 +159,78 @@ Un point de vocabulaire:
 * un service est répliqué si chaque instance peut gérer n'importe quelle requête client. On a juste plus d'instances pour tenir la charge. Souvent, ce sont les systèmes sans état 
 * un service est shardé (pas mieux, on pourrait dire partitionné, mais...) si chaque instance (ou _replica_) ne sait gérer qu'une partie des requêtes, mais que toutes réunies, elles traitent toute les requêtes. Souvent, ce sont les systèmes avec état. 
 
+
+Pour cacher la présence de shards, on peut utiliser _Ambassador_ qui centralise les demandes et appelle le bon shard. 
+
+#### Estimer le nombre de machines pour un partitionnement 
+
+En pratique, on peut calculer le nombre de shards, disons pour un cache. 
+Un système calcule des valeurs en fonction de paramètres, dont la taille maximum est 400Go. 
+On a besoin d'un cache pouvant stocker ces 2To par clé de requête. 
+Or, on constate qu'il faut servir 10000 requêtes par seconde. 
+Chaque instance (pod, machine, bref) peut en gérer 1000 et dispose de 32 Go de RAM utilisable pour un cache. 
+Il faut donc 10 machines pour servir les requêtes. 
+Si on ne partitionne pas la donnée sur des shards, chaque machine peut stocker 32Go de RAM, mais ce peut être la même donnée que son voisin. 
+On aurait donc 32Go gérés sur les 400Go possibles, soit environ 8% de donnée en cache (le _hit rate_). 
+Si au contraire on shard, on utilise une partition des données par shard, ce qui permet de stocker 320Go de données, soit 80% des valeurs possibles ! 
+C'est déjà un excellent moyen de préserver le backend. 
+
+
+Au passage, attention à la position du cache vis a vis du service: 
+* si le service lit la requête et accède après au cache, la capacité à servir les requêtes est donc bien celle du service. 
+* Si le cache est AVANT le service, donc au plus près du frontend, alors c'est bien la capacité de service du frontend qui va déterminer la capacité à servir les requêtes 
+En fait, la meilleure architecture, en fonction des machines et du cache, peut être: 
+
+```
+| Client | <----> | Front end | <-----> | Cache proxy | <----> | les shards du cache |
+                                <-----> | Back end |
+``` 
+
+Donc, préférentiellement, mettre le cache le plus proche du frontend possible. 
+
+
+#### En cas de plantage d'un shard 
+
+Bien sûr, il faut se poser la question de la défaillance d'un shard. 
+La charge sur le backend serait alors beaucoup plus grosse puisqu'un pourcentage de donnée conséquent ne serait plus en cache, donc à recalculer à chaque appel. 
+Peut être d'ailleurs le backend ne tiendrait pas cette charge. 
+Donc, la solution est de répliquer chaque shard, donc d'écrire N fois la donnée de chaque shard (avec N >= 2 évidemment).
+C'est au passage ce qu'on retrouve chez Kafka, Hadoop, etc.  
+
+
+#### Répartition dans les Shard
+
+Attention, il existe un cas où un shard va traiter beaucoup plus de requêtes que les autres. 
+Imaginons qu'on prenne un cache qui shard de la donnée uniformément. 
+Autrement dit, étant donnée une valeur V, la probabilité qu'elle soit sur un shard pris parmi N est de 1/N. 
+Le problème vient de l'accès à la donnée. 
+Par exemple, on stocke des photos, on shard par hash du fichier. 
+Imaginons qu'une photo fasse le buzz et se retrouve la plus accédée de tout le cluster. 
+Et par buzz, on entend un nombre d'accès délirant par rapport au volume normal. 
+Ce shard va devenir ce qu'on appelle un _hot shard_. 
+Sans réplication, ce serait probablement le plantage du shard, puis du backend qui servirait la même photo sans fin. 
+On peut également réaliser de la réplication dynamique d'un shard. 
+Pas qu'il soit plein en données, mais pour répartir les accès à ce shard. 
+Par exemple, si on a N machines, on peut copier les shards les moins accédés sur des machines qui ont la place. 
+Une fois la copie terminée, on réalloue les machines vides pour gérer le hot shard en réplicant ses valeurs. 
+
+
+Imaginons par exemple que les shards C et D soient peu accédés, B beaucoup, et que A explose. 
+On passerait donc de la distribution du haut à celle du bas. 
+```
+| Cache proxy | <---------> [ Shard A ]
+                <---------> [ Shard B ]
+				<---------> [ Shard C ]
+				<---------> [ Shard D ]
+
+
+| Cache proxy | <---------> [ Shard A ]
+                <---------> [ Shard A ]
+				<---------> [ Shard B,C ]
+				<---------> [ Shard B,D ]
+```
+ 
+__ATTENTION: Distribution uniforme de la donnée ne veut pas dire accès uniforme à la donnée_.
 
 ## Sources
 
