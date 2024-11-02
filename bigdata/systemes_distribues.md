@@ -151,7 +151,7 @@ Il vaut mieux prendre N petit et beaucoup de ressources (mémoire notamment) sur
 Pour ces raisons, on prendra plus un cache distribué indépendamment du service. 
 Le load balancer distribue les requêtes sur le bon cache, et en cas de défaut de cache, l'application est sollicitée par le pod du cache. 
 Par exemple: 1 load balancer, 3 caches, 2 applications déployées séparément. 
-__ATTENTION: bien distinguer un service des instances (ou _replica_) qui le gèrent__.
+__ATTENTION: bien distinguer un service des instances (ou _replica_) qui le gèrent__
 
 ### Shard: quand chaque replica ne sait gérer qu'une partie des requêtes
 
