@@ -118,7 +118,7 @@ _Ambassador_ consiste à avoir un composant entre un service et l'extérieur, po
 
 | Client | <---> | Ambassador | <-----> | Microservice 1 |
                                 <-----> | Microservice 2 |
-								<-----> | Microservice 3 |
+                                <-----> | Microservice 3 |
 ```
 
 
@@ -220,14 +220,14 @@ On passerait donc de la distribution du haut à celle du bas.
 ```
 | Cache proxy | <---------> [ Shard A ]
                 <---------> [ Shard B ]
-				<---------> [ Shard C ]
-				<---------> [ Shard D ]
+                <---------> [ Shard C ]
+                <---------> [ Shard D ]
 
 
 | Cache proxy | <---------> [ Shard A ]
                 <---------> [ Shard A ]
-				<---------> [ Shard B,C ]
-				<---------> [ Shard B,D ]
+                <---------> [ Shard B,C ]
+                <---------> [ Shard B,D ]
 ```
  
 __ATTENTION: Distribution uniforme de la donnée ne veut pas dire accès uniforme à la donnée_.
