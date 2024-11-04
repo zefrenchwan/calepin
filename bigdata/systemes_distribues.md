@@ -230,7 +230,7 @@ On passerait donc de la distribution du haut à celle du bas.
                 <---------> [ Shard B,D ]
 ```
  
-__ATTENTION: Distribution uniforme de la donnée ne veut pas dire accès uniforme à la donnée_.
+__ATTENTION: Distribution uniforme de la donnée ne veut pas dire accès uniforme à la donnée__
 
 ## Sources
 
