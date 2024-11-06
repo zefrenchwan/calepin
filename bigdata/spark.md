@@ -74,6 +74,14 @@ On peut utiliser un fichier de configuration (par défaut, dans le répertoire s
 Spark se base sur sa partie Core, qui définit les RDD. 
 Les autres parties (MLLib, SparkSQL, GraphX, etc) se basent sur cette couche. 
 Un RDD est de la donnée partitionnée et répartie. 
+Plus précisément, un RDD est la donnée de: 
+1. Une dépendance avec les RDD parents, afin de le reconstituer en cas de plantage 
+2. Un ensemble de partitions dont la réunion forme l'ensemble de la donnée du RDD. Le découpage est un facteur clé de la performance de traitement 
+3. La fonction qui permet de calculer la sortie de la prochaine étape 
+4. (Optionnel) De la métadonnée sur le schéma de partitionnement 
+5. (Optionnel) Où est la donnée sur le cluster 
+
+
 
 Il y a deux types d'opérations sur les RDD: 
 1. Les _transformations_ (filter, map, join) qui transforment les RDD en RDD 
@@ -253,3 +261,71 @@ Voir à ce sujet la page principale [ici](https://spark.apache.org/docs/latest/m
 On se place dans le cas d'un ressource manager qui est YARN.
 Par définition, les applications sont accessibles à YARN, donc un 
 `yarn logs -applicationId <app ID>` va donner des informations. 
+
+
+## SPARK SQL 
+
+Le driver permet de créer une `SparkSession`. 
+Spark a fait un effort volontaire d'isoler ses executors. 
+En conséquence, deux applications spark doivent échanger des données par une source externe (SGBD, HDFS, etc). 
+Spark SQL est construit au dessus de Spark Core (et donc des RDD). 
+Il offre l'usage du SQL sur des _DataFrame_, de la donnée distribuée et organisée en colonnes. 
+En première approximation, on peut dire qu'un Dataframe est l'équivalent spark d'une table pour un SGBDR. 
+Le SQL est optimisé via le Spark SQL Catalyst optimizer. 
+Le développeur écrit peu de code, et le meilleur plan est trouvé par l'optimisateur. 
+Pour y parvenir, il stocke et utilise des statistiques sur les données et ainsi trouver le meilleur algorithme de join, par exemple, ou déterminer le meilleur nombre de partitions. 
+Par exemple, Spark SQL utilise le _dynamic partition pruning_ pour éviter de charger une partition de donnée non pertinente pour une requête. 
+
+### Les Dataframes 
+
+| Nom | Langage | Description |
+|-----------------|------------|-----------|
+| `Dataset<T>` | Scala / Java | abstraction de RDD typé |
+| `DataFrame` | Python, Java, Scala | Dataset de Row |
+
+Un dataframe est une collection immutable de données, organisée en rows, et chaque row est divisée en colonnes: 
+```
+Dataframe ---> Rows ---> Cols 
+(schema)
+```
+
+Comme les RDD, l'api propose des transformations (évaluées en mode lazy) et des actions (évaluées par avance, donc eagerly). 
+
+#### Principales transformations 
+
+| Nom |  But |
+|-------------|---------------|
+| select |  select de colonnes |
+| selectExpr  | select par expression SQL |
+| filter / where  | filtre de colonnes |
+| distinct  | enlève la donnée dupliquée |
+| sort  | Tri par colonne(s) |
+| limit  | Prendre les N premières lignes |
+| union | Union de dataframes |
+| withColumn | Ajoute une colonne |
+| withColumnRenamed | Renomme une colonne |
+| Drop | enlève une colonne |
+| sample | sélection aléatoire de lignes |
+| randomSplit | Par exemple test vs training set |
+| join | Plusieurs types possibles |
+| groupBy | group by colonnes |
+
+Pour récupérer une colonne spécifique, on utilise _col_. 
+
+#### Principales actions 
+
+| Nom |  But |
+|-------------|---------------|
+| show | affiche les N premiers résultats |
+| head / take / first | Renvoie les N premières lignes |
+| takeAsList |  Prend les N premières lignes en liste |
+| collect / collectAsList | Convertit le RDD en liste | 
+| count | Nombre de lignes |
+| describe | principales caractéristiques statistiques |
+
+
+
+# Sources 
+
+* Site officiel
+* Beginning Apache Spark 3 : with dataframes, spark SQL, Structured Streamings and Spark ML Library. Luu, 2021
