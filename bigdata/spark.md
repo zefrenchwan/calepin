@@ -281,13 +281,17 @@ Par exemple, Spark SQL utilise le _dynamic partition pruning_ pour éviter de ch
 | Nom | Langage | Description |
 |-----------------|------------|-----------|
 | `Dataset<T>` | Scala / Java | abstraction de RDD typé |
-| `DataFrame` | Python, Java, Scala | Dataset de Row |
+| `DataFrame` | Python | Dataset de Row |
 
 Un dataframe est une collection immutable de données, organisée en rows, et chaque row est divisée en colonnes: 
 ```
 Dataframe ---> Rows ---> Cols 
 (schema)
 ```
+
+Spécifiquement sur Java et Scala, Dataframe n'est plus proposé sur Spark 3.5.1 et on manipule des _Dataset<Row>_.
+
+
 
 Comme les RDD, l'api propose des transformations (évaluées en mode lazy) et des actions (évaluées par avance, donc eagerly). 
 

@@ -14,7 +14,7 @@ import org.apache.spark.sql.types.StructType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class AppTest {
+public class SessionTest {
 
     @Test
     public void testSession() {
