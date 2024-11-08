@@ -15,8 +15,15 @@ conf.set("spark.network.timeout", "600s")
 
 with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
     persons = spark.read.option("inferSchema", True).option("header",True).csv("data/persons.csv")
-    persons.show()
     roles = spark.read.option("inferSchema", True).option("header",True).csv("data/roles.csv")
-    roles.show()
     salaries = spark.read.option("inferSchema", True).option("header",True).csv("data/salaries.csv")
-    salaries.show()
+    # load all tables and join 
+    base_data = salaries\
+        .join(roles, roles["ID"] == salaries["RID"]).withColumnRenamed("NAME", "ROLE") \
+        .join(persons, persons["ID"] == salaries["PID"]) \
+        .select("DATE", "AMOUNT", "ROLE","NAME") 
+    
+    base_data.repartition(1).write.mode('overwrite').option("header", True).csv("storage/base.csv")
+    # load it to be sure 
+    core_data = spark.read.option("inferSchema", True).option("header",True).csv("storage/base.csv/")
+    assert core_data.count() >= 250
