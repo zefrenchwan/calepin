@@ -17,5 +17,5 @@ Pyspark may face weird errors, here are the versions that work for me:
 |-------|--------|
 | Hadoop | 3.3.6 |
 | Winutils | for 3.3.6 |
-| Java | 17 |
+| Java | 11 |
 | Python | 3.11.8 |
