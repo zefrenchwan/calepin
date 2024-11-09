@@ -1,3 +1,4 @@
+# Tool to generate the salaries data
 if __name__ == '__main__':
     with open("data/salaries.csv", "w") as f:
         f.write('DATE,RID,PID,AMOUNT\n')
@@ -11,7 +12,7 @@ if __name__ == '__main__':
                     date = date + str(month)
                 date = date + "/01"
                 # link role to person. 
-                # Salary should be ascending values 
+                # Salary should be ascending 
                 rid_pid = None 
                 base_salary = 50000
                 for index in range(0,10):
