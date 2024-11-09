@@ -28,7 +28,7 @@ Aussi, il va:
 
 ATTENTION: 
 * le spark context est la responsabilité du driver 
-* une tache est exécutée par un et un seul executor
+* un executor exécute une tache et une seule, mais une tache active est exécutée par au moins un exécutor 
  
 
 En fait, le _driver_ coordonne les _executors_. 
@@ -265,7 +265,14 @@ Par définition, les applications sont accessibles à YARN, donc un
 
 ## SPARK SQL 
 
-Le driver permet de créer une `SparkSession`. 
+Déjà, pour la culture, on distingue les traitements dits _online_ pour les bases de données: 
+* OLAP: on agrège de la donnée qu'on analyse, à froid 
+* OLTP: on traite en temps réel et de manière transactionnelle de la donnée, sans agrégation 
+
+Spark SQL sert à l'OLAP seulement car il a une latence bien plus grande que les traitements OLTP. 
+
+
+Sur le fonctionnement, le driver permet de créer une `SparkSession`. 
 Spark a fait un effort volontaire d'isoler ses executors. 
 En conséquence, deux applications spark doivent échanger des données par une source externe (SGBD, HDFS, etc). 
 Spark SQL est construit au dessus de Spark Core (et donc des RDD). 
@@ -327,6 +334,110 @@ Pour récupérer une colonne spécifique, on utilise _col_.
 | count | Nombre de lignes |
 | describe | principales caractéristiques statistiques |
 
+### Exécuter du code SQL 
+
+Le principe est le suivant: 
+1. Créer sa session 
+2. Charger les dataframes 
+3. Les enregistrer avec un nom de table, soit pour la session (par défaut), soit globalement (pour toutes les sessions, avec `pyspark.sql.DataFrame.createGlobalTempView`)
+4. Faire du SQL sur ces données
+5. Eventuellement persister le résultat 
+
+
+Un catalogue permet de retrouver les dataframes enregistrées, leurs colonnes, etc. 
+En fait, on peut voir le catalogue comme la méta-donnée sur les tables enregistrées. 
+
+#### Agrégations
+
+Parmi les agrégations possibles, on peut signaler la présence de fonctions utiles: 
+* countDistinct, sumDistinct
+* collect_list, collect_set
+* groupBy (qui peut avoir plusieurs arguments)
+* agg qui permet de prendre plusieurs agrégations pour le même groupBy
+
+Par exemple: 
+
+```
+from pyspark.sql.session import SparkSession
+from pyspark import SparkConf
+from pyspark.sql.functions import avg,stddev,skewness,kurtosis
+
+
+conf = SparkConf().setMaster("local[1]").setAppName("test")
+conf.set("spark.executor.heartbeatInterval","300s")
+conf.set("spark.network.timeout", "600s")
+
+
+with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
+    base = spark.read.option("inferSchema", True).option("header",True).csv("storage/base.csv")
+    stats = base.select("ROLE", "AMOUNT").groupBy("ROLE").agg(\
+        avg("AMOUNT"),\
+        stddev("AMOUNT"),\
+        skewness("AMOUNT"),\
+        kurtosis("AMOUNT")\
+    )
+
+    stats.show()
+```
+
+#### Pivot 
+
+Si une colonne C prend les valeurs _a,b,c_, on peut retourner la table en prenant ces valeurs comme des valeurs différentes. 
+Par exemple: 
+
+```
++----------+------+----+
+|      ROLE|AMOUNT|YEAR|
++----------+------+----+
+|       Dev| 50000|2020|
+|       CEO| 70000|2020|
+|       CTO| 65000|2020|
+|Accountant| 60000|2020|
+|        HR| 55000|2020|
+|       Dev| 50000|2020|
+```
+
+
+Le pivot permet d'avoir les années comme des colonnes, et ainsi réaliser une agrégation par une autre colonne. 
+Le résultat sera: 
+
+
+```
++----------+-------+-------+-------+-------+-------+
+|      ROLE|   2020|   2021|   2022|   2023|   2024|
++----------+-------+-------+-------+-------+-------+
+|       CTO|65000.0|68000.0|71000.0|74000.0|77000.0|
+|        HR|55000.0|58000.0|61000.0|64000.0|67000.0|
+|       Dev|50000.0|53000.0|56000.0|59000.0|62000.0|
+|       CEO|70000.0|73000.0|76000.0|79000.0|82000.0|
+|Accountant|60000.0|63000.0|66000.0|69000.0|72000.0|
++----------+-------+-------+-------+-------+-------+
+```
+
+
+Qu'on obtient avec: 
+
+```
+from pyspark.sql.session import SparkSession
+from pyspark import SparkConf
+from pyspark.sql.functions import avg,stddev,skewness,kurtosis
+from pyspark.sql.types import IntegerType,StringType 
+from pyspark.sql.functions import udf 
+
+
+conf = SparkConf().setMaster("local[1]").setAppName("test")
+conf.set("spark.executor.heartbeatInterval","300s")
+conf.set("spark.network.timeout", "600s")
+
+
+with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
+    base = spark.read.option("inferSchema", True).option("header",True).csv("storage/base.csv")
+    year_udf = udf(lambda v:v[0:4], StringType())
+    salaries = base.withColumn("YEAR", year_udf(base["DATE"])).select("ROLE","AMOUNT","YEAR")
+    salaries.show()
+    agg_salaries = salaries.groupBy("ROLE").pivot("YEAR").avg("AMOUNT")
+    agg_salaries.show()
+```
 
 
 # Sources 

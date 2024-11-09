@@ -26,4 +26,4 @@ with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
     base_data.repartition(1).write.mode('overwrite').option("header", True).csv("storage/base.csv")
     # load it to be sure 
     core_data = spark.read.option("inferSchema", True).option("header",True).csv("storage/base.csv/")
-    assert core_data.count() >= 250
+    assert core_data.count() == salaries.count()

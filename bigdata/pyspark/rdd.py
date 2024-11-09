@@ -84,7 +84,8 @@ role_person_salary = person_salaries.join(roles).map(mapRoleValues)
 avg_by_key = role_person_salary.map(lambda v: (v[0],v[4])) \
     .mapValues(lambda v: (float(v), 1)) \
     .reduceByKey(lambda a,b: (a[0]+b[0], a[1]+b[1])) \
-    .mapValues(lambda v: v[0]/v[1]) \
+    .mapValues(lambda v: v[0]/v[1]) 
+
 
 #for k,v in avg_by_key.collectAsMap().items():
 #    print(k,v)

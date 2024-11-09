@@ -10,6 +10,7 @@ Sandbox to play with Spark and Java
 ## Install
 
 | Name | Version | Action |
+|-----------------|-----------|----------|
 | Java | 11 | Set JAVA_HOME |
 | Spark | 3.5.3 | No action |
 | Hadoop | 3.3.6 | Set HADOOP_HOME |
