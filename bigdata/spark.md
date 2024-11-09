@@ -440,6 +440,42 @@ with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
 ```
 
 
+Et dans sa version SQL:
+
+```
+agg_sql_salaries = spark.sql("select * from salaries pivot ( avg(AMOUNT) as avg for year in (2020,2021, 2022, 2023, 2024))")
+```
+
+#### Joins 
+
+Si on prend du recul sur un join, on a basiquement: 
+* une table à gauche, on va dire G 
+* une table à droite, disons D 
+* une condition de jointure, disons COND 
+
+| Type de JOIN | Résultat | Nom spark |
+|--------------|----------|------------|
+| INNER | (a,b) quand COND |  inner |
+| LEFT OUTER | (a,b) si COND sinon (a,null) | left_outer |
+| RIGHT OUTER | (a,b) si COND sinon (null,b) | right_outer |
+| FULL OUTER | (a,b) si COND ou (a,null) ou (null,b) | outer |
+| LEFT ANTI | (a,null) si NON COND | left_anti |
+| LEFT SEMI | (a,null) si COND | left_semi | 
+| CROSS | tous les couples (a,b) possibles | on appelle df.crossJoin(...) |
+
+
+Au niveau de l'implémentation Spark des joins, il y a deux algorithmes: 
+* _Shuffle hash join_ (quand les deux tables sont grandes): on met dans la même partition les éléments ayant même hash. Donc il y a shuffle
+* _Broadcast hash join_ (quand une table tient en mémoire): on hash les valeurs de la petite table et on l'envoie à la partition de la grande. Pas de shuffle, mais du broadcast
+
+#### Fonctions 
+
+Il existe plus de 200 fonctions définies dans l'API. 
+Mais on peut définir les siennes, on parle d'UDF. 
+
+
+#### Group by, roll up, cube 
+
 # Sources 
 
 * Site officiel
