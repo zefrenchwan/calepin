@@ -585,10 +585,243 @@ Au niveau de l'implémentation Spark des joins, il y a deux algorithmes:
 #### Fonctions 
 
 Il existe plus de 200 fonctions définies dans l'API. 
-Mais on peut définir les siennes, on parle d'UDF. 
+Mais on peut définir les siennes, on parle d'user defined functions. 
+Il en existe de deux sortes: 
+1. Scalaires (UDF): elles transforment, pour une ligne donnée, une valeur en une autre. On peut prendre, __à ligne donnée__, des valeurs et réaliser un map local. Cas d'usage: désérialiser un tableau de string d'un CSV pour en faire une instance d'un type qu'on a défini
+2. au niveau table (UDTF): elles transforment une table en table. On les retrouve aussi sous le nom de [UDAF](https://spark.apache.org/docs/latest/sql-ref-functions-udf-aggregate.html) (pour Aggregated). 
+Dans ce cas, la session contient de quoi nommer les fonctions et les utiliser ensuite. 
 
 
-#### Group by, roll up, cube 
+
+#### group by, roll up, cube, et finalement les grouping sets  
+
+Ce sont des opérations propres aux data-warehouses. 
+Pour la théorie générale, voir [ici](https://github.com/zefrenchwan/calepin/blob/main/bi/dwh.md). 
+Fondamentalement, une dimension peut avoir des sous dimensions: 
+* pays, région, ville, etc 
+* année, mois dans l'année, jour 
+* gamme, sous gamme, produit
+
+
+Le principe du _rollup_ est d'agréger de la donnée d'une dimension (ou plusieurs) pour avoir les valeurs globales.  
+Dans le cas de Spark, imaginons qu'on ait ceci: 
+
+| DATE | ROLE | AMOUNT |
+|------|------|--------|
+| 2020-01-01 | CEO | 10000 |
+| 2020-01-01 | DEV | 4000 |
+| 2020-01-01 | CTO | 70000 |
+| 2020-02-01 | CEO | 10000 |
+| 2020-02-01 | DEV | 4000 |
+| 2020-02-01 | CTO | 70000 |
+
+
+On veut comprendre les salaires par rôle et par an. 
+Le principe est de couper la donnée par an (avec une udf), de réaliser les moyennes par an sur le salaire à rôle donné, etc. 
+Voici le cadre général: 
+
+```
+from pyspark.sql.session import SparkSession
+from pyspark import SparkConf
+from pyspark.sql.functions import udf
+
+
+conf = SparkConf().setMaster("local[1]").setAppName("test")
+conf.set("spark.executor.heartbeatInterval","300s")
+conf.set("spark.network.timeout", "600s")
+
+
+with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
+    data = spark.read.option("inferSchema", True).option("header",True).csv("storage/base.csv/")
+    year_udf = udf(lambda d:d[0:4])
+    salaries = data\
+        .withColumn("YEAR", year_udf(data["date"]))\
+        .select("YEAR","DATE","ROLE","AMOUNT")
+```
+
+
+Pour avoir la moyenne par an et par rôle, il suffit d'un group by. 
+
+```
+# amounts by ROLE and YEAR 
+salaries.groupBy("ROLE","YEAR").avg("AMOUNT").orderBy("YEAR","ROLE").show()
+  
+```
+
+
+Ce qui donne par exemple: 
+
+```
++----------+----+-----------+
+|      ROLE|YEAR|avg(AMOUNT)|
++----------+----+-----------+
+|Accountant|2020|    60000.0|
+|       CEO|2020|    70000.0|
+|       CTO|2020|    65000.0|
+|       Dev|2020|    50000.0|
+|        HR|2020|    55000.0|
+```
+
+
+
+On a exactement ce qu'on demande, donc pas les moyennes tous rôles confondus et toute année confondue. 
+Il faudrait alors deux requêtes pour les avoir et un union du résultat. 
+L'usage de `cube` permet de répondre à ce besoin. 
+
+
+Le rollup adresse ici le regroupement des dimensions par rapport à leurs sous dimensions. 
+Imaginons qu'on a `YEAR --> DATE`, on veut réaliser un rollup sur la période. 
+__ATTENTION: le rollup ne renvoie pas toute la table, mais les dimensions et les agrégations__.
+Autrement dit, le rollup prend toutes les lignes, agrège par les dimensions qu'on lui a fixé, et dans le sens du rollup. 
+
+```
+salaries.rollup("YEAR","DATE").avg("AMOUNT").orderBy("YEAR","DATE").show()
+```
+
+Donnera: 
+
+```
++----+----------+-----------+
+|YEAR|      DATE|avg(AMOUNT)|
++----+----------+-----------+
+|NULL|      NULL|    61000.0|
+|2020|      NULL|    55000.0|
+|2020|2020/01/01|    55000.0|
+|2020|2020/02/01|    55000.0|
+|2020|2020/03/01|    55000.0|
+|2020|2020/04/01|    55000.0|
+|2020|2020/05/01|    55000.0|
+|2020|2020/06/01|    55000.0|
+|2020|2020/07/01|    55000.0|
+|2020|2020/08/01|    55000.0|
+|2020|2020/09/01|    55000.0|
+|2020|2020/10/01|    55000.0|
+|2020|2020/11/01|    55000.0|
+|2021|      NULL|    58000.0|
+```
+
+
+On voit d'abord les valeurs null, null, qui sont la moyenne globale, tout confondu. 
+On voit aussi, ensuite, à YEAR donné, la valeur NULL pour la date qui signifie la moyenne sur un an. 
+Et à la ligne suivante, la moyenne de toutes les lignes à YEAR et DATE donnés. 
+
+
+En général, on peut réaliser le rollup de dimensions quelconques, disons A et B, pour une agrégation AGG. 
+Ce que va présenter le rollup devient: 
+1. null, null, AGG(toutes les lignes)
+2. a, null, AGG(à a donné pour A, toutes les valeurs)
+3. a,b, AGG(toutes les lignes à a et b donnés pour A et B)
+
+
+La méthode `cube` le fait dans les deux sens: du point de vue de A et B. 
+Ainsi, un cube sur les dimensions A et B va donner: 
+1. null, null, AGG(toutes les lignes)
+2. a, null, AGG (toutes les lignes ayant a comme valeur de A) 
+3. null, b, AGG(toutes les lignes dont la valeur est b pour B)
+4. a,b,AGG(toutes les lignes dont la valeur pour A est a et b pour B) 
+
+Par exemple:
+
+```
+data.cube("DATE","ROLE","NAME").avg("AMOUNT").orderBy("DATE","ROLE","NAME").show()
+```
+
+Donnera: 
+
+```
++----+----------+---------------+-----------+
+|DATE|ROLE      |NAME           |avg(AMOUNT)|
++----+----------+---------------+-----------+
+|NULL|NULL      |NULL           |61000.0    |
+|NULL|NULL      |Claire Doe     |56000.0    |
+...
+|NULL|Accountant|NULL           |66000.0    |
+|NULL|Accountant|Marie Smith    |66000.0    |
+|NULL|CEO       |NULL           |76000.0    |
+|NULL|CEO       |John Reese     |76000.0    |
+|NULL|CTO       |NULL           |71000.0    |
+```
+
+
+
+Leur point commun est qu'ils sont des cas particuliers de la notion de [grouping set](https://stackoverflow.com/questions/37975227/what-is-the-difference-between-cube-rollup-and-groupby-operators).
+Reprenons l'exemple. 
+Certains regroupements notn pas trop de sens (YEAR, DATE par exemple). 
+On aimerait faire la liste exhaustive des dimensions qu'on aimerait récupérer. 
+Et bien, c'est possible avec les grouping sets: 
+
+```
+salaries.createOrReplaceTempView("salaries")
+
+spark.sql("""
+	SELECT YEAR, DATE, ROLE, avg(AMOUNT) as avg
+	FROM salaries
+	GROUP BY 
+		GROUPING SETS (
+			(),
+			(YEAR),
+			(ROLE),
+			(DATE),
+			(YEAR, ROLE),
+			(DATE, ROLE)
+		)
+	ORDER BY YEAR, DATE, ROLE
+""").show()
+
+spark.catalog.dropTempView("salaries")
+```
+
+Ce qui va donner: 
+
+```
++----+----------+----------+-------+
+|YEAR|      DATE|      ROLE|    avg|
++----+----------+----------+-------+
+|NULL|      NULL|      NULL|61000.0|
+|NULL|      NULL|Accountant|66000.0|
+|NULL|      NULL|       CEO|76000.0|
+|NULL|      NULL|       CTO|71000.0|
+|NULL|      NULL|       Dev|56000.0|
+|NULL|      NULL|        HR|61000.0|
+|NULL|2020/01/01|      NULL|55000.0|
+|NULL|2020/01/01|Accountant|60000.0|
+|NULL|2020/01/01|       CEO|70000.0|
+|NULL|2020/01/01|       CTO|65000.0|
+|NULL|2020/01/01|       Dev|50000.0|
+|NULL|2020/01/01|        HR|55000.0|
+|NULL|2020/02/01|      NULL|55000.0|
+|NULL|2020/02/01|Accountant|60000.0|
+|NULL|2020/02/01|       CEO|70000.0|
+|NULL|2020/02/01|       CTO|65000.0|
+|NULL|2020/02/01|       Dev|50000.0|
+|NULL|2020/02/01|        HR|55000.0|
+|NULL|2020/03/01|      NULL|55000.0|
+|NULL|2020/03/01|Accountant|60000.0|
++----+----------+----------+-------+
+```
+
+### Les window functions 
+
+
+### Voir comment Spark SQL optimise les jobs 
+
+Que ce soit du code SQL ou de la manipulation de dataframes, Spark SQL gère toujours de la même manière:
+1. Il fabrique un plan d'exécution logique (logical plan) à partir du code. Il l'optimise par règles (filter avant join) ou calculs de coût (optimisation par taille, stats sur les colonnes, etc). 
+2. A partir du plan logique, il fabrique un plan physique qu'il optimise suivant la même logique 
+3. A partir de ce plan physique, il génère le bytecode qu'il va faire exécuter aux workers 
+
+
+Si cet algorithme est la responsabilité de Catalyst, le projet Tungstene apporte une gestion fine des ressources matérielles (mémoire, CPU essentiellement, le réseau étant de moins en moins le facteur bloquant). 
+
+
+Etant donné un dataframe df, on peut voir le plan d'exécution pour le fabriquer: 
+
+```
+df.explain(true) # both logical and physical plan 
+```
+
+On peut encore [affiner avec des valeurs différentes](https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.explain.html) pour voir uniquement le plan logique, tout, etc. 
+ 
 
 # Sources 
 
