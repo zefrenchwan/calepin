@@ -1,5 +1,6 @@
-# Tool to generate the salaries data
-if __name__ == '__main__':
+from random import randint
+
+def generate_salaries():
     with open("data/salaries.csv", "w") as f:
         f.write('DATE,RID,PID,AMOUNT\n')
         for year in range(2020, 2025):
@@ -29,4 +30,40 @@ if __name__ == '__main__':
                     f.write(date + "," + rid_pid + "," + str(base_salary) + "\n")
 
 
+def generate_sales():
+    with open("data/sales.csv", "w") as f:
+        f.write("ID,DATE,AMOUNT\n")
+        
+        index = 0
+        for year in range(2020,2025):
+            for month in range(1, 13):
+                max_days = 31
+                if month in [4,6,9,11]:
+                    max_days = 30
+                elif month == 2:
+                    max_days = 28 if year % 4 != 0 else 29
+                else:
+                    max_days = 31
 
+                for day in range(1, max_days + 1):
+                    
+                    date = str(year) + "/"
+                    if month <= 9:
+                        date = date + "0" + str(month)
+                    else:
+                        date = date + str(month)
+                    date = date + "/"
+                    if day <= 9:
+                        date = date + "0" + str(day)
+                    else:
+                        date = date + str(day)
+
+                    price = str(randint(10,500)) + "." + str(randint(1,99))
+                    line = str(index) + "," + date + "," + price + "\n"
+                    f.write(line)
+                    index = index + 1
+
+
+if __name__ == '__main__':
+    generate_sales() 
+                

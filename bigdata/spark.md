@@ -800,7 +800,121 @@ Ce qui va donner:
 +----+----------+----------+-------+
 ```
 
-### Les window functions 
+### Les fenêtres et les window functions 
+
+Quand on agrège une table par des dimensions, on a une ligne par valeur possible des dimensions. 
+Un group by (A) agg(B) va nous donner une ligne par valeur possible sur A. 
+Le fenêtrage consiste à opérer une agrégation sur un ensemble de valeurs appelé window, tout en gardant les lignes de la table initiale. 
+Par exemple, imaginons qu'on cherche à classer les élèves par an et par matière. 
+La spécification de la fenêtre sera donc: rang par note et année ordonnée par note asc. 
+
+
+En fait, la définition formelle d'une window utilise trois éléments: 
+1. Le critère de partition, c'est à dire l'ensemble des colonnes qui définit le regroupement
+2. L'ordre dans lequel on traite les données, utile pour certaines fonctions (lead, lag, dense_rank, etc)
+3. Les proches qu'on prend (frame) dans des window relatives. Par exemple, 3 éléments avant et deux après chaque row. 
+
+
+
+#### Cas 1: Trouver la position au sein d'une window 
+
+```
+# now, include rank to find, each year, who gets most of the money
+window = Window.partitionBy('YEAR').orderBy(col("avg").desc())
+year_base\
+	.groupBy("YEAR","ROLE").avg("AMOUNT")\
+	.withColumnRenamed("avg(AMOUNT)", "avg")\
+	.withColumn("rank", dense_rank().over(window))\
+	.orderBy("YEAR","rank")\
+	.show()
+```
+
+Ce qui donne: 
+
+```
++----+----------+-------+----+
+|YEAR|      ROLE|    avg|rank|
++----+----------+-------+----+
+|2020|       CEO|70000.0|   1|
+|2020|       CTO|65000.0|   2|
+|2020|Accountant|60000.0|   3|
+|2020|        HR|55000.0|   4|
+|2020|       Dev|50000.0|   5|
+|2021|       CEO|73000.0|   1|
+|2021|       CTO|68000.0|   2|
+|2021|Accountant|63000.0|   3|
+....
+```
+
+#### Cas 2: regrouper par une colonne pour mesurer l'écart à une agrégation 
+
+Quand on agrège une table par des dimensions, on a une ligne par valeur possible des dimensions. 
+Un group by (A) agg(B) va nous donner une ligne par valeur possible sur A. 
+Si on veut comparer la valeur agrégée avec les lignes de la table initiale, ça force un join. 
+Par exemple, si on prend le salaire annuel moyen et qu'on veut comparer chaque mois le salaire de la personne avec le salaire moyen sur l'année, c'est un join entre la table agrégée et la table initiale. 
+
+On va d'emblée donner un exemple de comment s'éviter ce join: 
+
+```
+from pyspark.sql.session import SparkSession
+from pyspark import SparkConf
+from pyspark.sql.functions import avg,stddev,skewness,kurtosis
+from pyspark.sql.window import Window
+from pyspark.sql.types import StringType
+
+conf = SparkConf().setMaster("local[1]").setAppName("test")
+conf.set("spark.executor.heartbeatInterval","300s")
+conf.set("spark.network.timeout", "600s")
+
+with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
+    base = spark.read.option("inferSchema", True).option("header",True).csv("storage/base.csv")
+    # add year, note that there is no UDF 
+    year_base = base.selectExpr("*", "substring(DATE,0,4) as YEAR")
+    # include avg for each year
+    window = Window.partitionBy('YEAR')
+    diff_per_role = year_base\
+        .withColumn("avg", avg("AMOUNT").over(window))\
+        .selectExpr("*", "(AMOUNT - avg) as diff")\
+        .select("DATE", "ROLE", "NAME", "AMOUNT", "diff")
+    diff_per_role.show()
+```
+
+Le principe est le suivant: 
+1. On créé la colonne YEAR, sans UDF. 
+2. On créé une window qui va regrouper les lignes par YEAR 
+3. On applique à chaque window (donc une window par YEAR) une agrégation (ici un avg), ce qui nous donne une nouvelle colonne. 
+
+#### Cas 3: calculer des agrégations sur des groupes relatifs aux lignes 
+
+```
+from pyspark.sql.session import SparkSession
+from pyspark import SparkConf
+from pyspark.sql.functions import col,sum
+from pyspark.sql.window import Window,WindowSpec
+from pyspark.sql.types import StringType
+
+conf = SparkConf().setMaster("local[1]").setAppName("test")
+conf.set("spark.executor.heartbeatInterval","300s")
+conf.set("spark.network.timeout", "600s")
+
+with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
+    base = spark.read.option("inferSchema", True).option("header",True).csv("data/sales.csv")
+    base.printSchema()
+    window_since_year = Window.partitionBy("YEAR").orderBy("DATE").rowsBetween(Window.unboundedPreceding,Window.currentRow)
+    sales_since_year = base\
+        .selectExpr("*", "substring(DATE, 0,4) as YEAR")\
+        .withColumn("year_sales", sum("AMOUNT").over(window_since_year))\
+        .orderBy("DATE")
+    
+    window_all =  Window.orderBy("DATE").rowsBetween(Window.unboundedPreceding,Window.currentRow)
+    sales_since_start =  base\
+        .withColumn("global_sales", sum("AMOUNT").over(window_all))\
+        .orderBy("DATE")\
+        .show()
+```
+
+
+La clé reste d'utiliser la fonction [rowsBetween](https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.Window.rowsBetween.html) qui permet de créer des window en groupant des lignes. 
 
 
 ### Voir comment Spark SQL optimise les jobs 
@@ -821,6 +935,7 @@ df.explain(true) # both logical and physical plan
 ```
 
 On peut encore [affiner avec des valeurs différentes](https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.explain.html) pour voir uniquement le plan logique, tout, etc. 
+
  
 
 # Sources 
