@@ -1,1 +1,4 @@
 spark-warehouse/
+spark_md/
+derby.log
+metastore_db/

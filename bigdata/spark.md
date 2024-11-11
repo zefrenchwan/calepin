@@ -1,7 +1,11 @@
 # Spark 
 
-Raison d'être: manque de flexibilité de MapReduce pour la gestion de plusieurs actions d'affilée. 
-Développé à partir de 2009 par l'université de Berkeley (USA), projet Apache en 2010, mis en avant dès 2013 par Apache. 
+L'usage de jobs map reduce sur Hadoop a vite montré ses limites, notamment sur la gestion de plusieurs actions d'affilée. 
+Le développement de Spark a commencé en 2009 par l'université de Berkeley (USA), avant de devenir un projet Apache en 2010, mis en avant dès 2013 par Apache. 
+Ses pricipaux avantages sont: 
+* sa simplicité et son efficacité relative 
+* son coût (gratuit) et le fait qu'il tourne sur de nombreux types de plateforme (hadoop, k8s, standalone, cloud)
+* son interaction avec les supports de stockage (sgbdr, hdfs, amazon s3, etc) et les formats (orc, parquet
 
 ## Concepts et architecture 
 
@@ -54,6 +58,14 @@ df = spark.read.json("data.json")
 df.show()
 ```
 
+| Nom | Description |
+|-----------|--------------|
+| SparkSession | point d'entrée de Spark SQL (embarque un spark context) |
+| SparkContext | Point d'entrée de Spark Core (que Spark SQL décore) |
+| Driver | Le programme qui coordonne les tâches spark (coté master donc) |
+| Worker | Les noeuds non master dans Spark (qui est distribué) |
+| Cluster manager | Alloue des ressources en lien avec le RM du cluster |
+
 #### Application: configurer le lancement d'un job spark 
 
 Pour les langages JVM (Scala, Java), on peut lancer un job programmatiquement. 
@@ -86,6 +98,11 @@ Plus précisément, un RDD est la donnée de:
 Il y a deux types d'opérations sur les RDD: 
 1. Les _transformations_ (filter, map, join) qui transforment les RDD en RDD 
 2. Les _actions_ (reduce, take et first, count, saveAsTextFile) qui renvoient une valeur au driver 
+
+| Type | Description | Exemples |
+|----------|------------|----------|
+| Transformation | rdd -> rdd | flatMap, reduceByKey, filter |
+| Action | rdd -> pas rdd | count, saveAsTextFile, collect |  
 
 #### Données réparties, variables partagées
 
@@ -448,18 +465,69 @@ with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
 
 ```
 
-### Exécuter du code SQL 
-
-Le principe est le suivant: 
-1. Créer sa session 
-2. Charger les dataframes 
-3. Les enregistrer avec un nom de table, soit pour la session (par défaut), soit globalement (pour toutes les sessions, avec `pyspark.sql.DataFrame.createGlobalTempView`)
-4. Faire du SQL sur ces données
-5. Eventuellement persister le résultat 
+### Les opérations sur les dataframes 
 
 
-Un catalogue permet de retrouver les dataframes enregistrées, leurs colonnes, etc. 
-En fait, on peut voir le catalogue comme la méta-donnée sur les tables enregistrées. 
+#### Charger la donnée 
+
+Au delà du chargement, on peut forcer un schéma à la donnée. 
+Ce schéma permet de préciser si un champ est nullable, par exemple. 
+La structure est un StructType, tableau de struct fields. 
+Mais on peut aussi utiliser du texte, par exemple `date STRING, amount DOUBLE`. 
+
+```
+from pyspark.sql.session import SparkSession
+from pyspark import SparkConf
+from pyspark.sql.types import StructField,StructType,StringType,IntegerType,DoubleType
+from pyspark.sql import Row
+
+conf = SparkConf().setMaster("local[1]").setAppName("test")
+conf.set("spark.executor.heartbeatInterval","300s")
+conf.set("spark.network.timeout", "600s")
+
+with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
+    base = spark.read.option("inferSchema", True).option("header",True).csv("data/sales.csv")
+    base.printSchema()
+    schema = "ID INT, DATE STRING, AMOUNT DOUBLE"
+    base = spark.read.option("header",True).schema(schema).csv("data/sales.csv")
+    base.printSchema()
+    schema = StructType([
+        StructField("ID",IntegerType()),
+        StructField("DATE",StringType()),
+        StructField("AMOUNT",DoubleType()),
+    ])
+    base = spark.read.option("header",True).schema(schema).csv("data/sales.csv")
+    base.printSchema()
+
+    schema = StructType([
+        StructField("id",IntegerType(), False),
+        StructField("name",StringType(), False ),
+        StructField("age",IntegerType(), False),
+    ])
+    simple = spark.createDataFrame([Row(id = 0, name = 'John Doe', age = 21)], schema = schema)
+    simple.printSchema()
+```
+
+#### Sélectionner de la donnée 
+
+On peut déjà le faire depuis la définition de la dataframe avec:
+* select qui prend des colonnes (on peut utiliser la fonction col("nom de la colonne") pour faire une colonne à partir de son nom)
+* selectExpr qui prend des noms. Au passage `count(*) as counter` est parfaitement valide 
+* expr qui permet de prendre une expression dans un select 
+
+
+On peut utiliser aussi des `map` qui permettront de transformer les champs lus. 
+Ce mix permet d'appliquer du SQL, puis un map, puis du code, puis encore du SQL, etc. 
+
+#### filtrer la donnée 
+
+La fonction au niveau de la dataframe est where(condition). 
+La condition peut être une condition composée, utiliser col, ou encore être du texte. 
+Par exemple `df.select(expr("count(*) as counter")).where('amount > 1000.0')
+
+#### Ordonner la donnée 
+
+La fonction est orderBy, et desc("nom de colonne") permet d'obtenir un ordre descendant. 
 
 #### Agrégations
 
@@ -936,9 +1004,141 @@ df.explain(true) # both logical and physical plan
 
 On peut encore [affiner avec des valeurs différentes](https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.explain.html) pour voir uniquement le plan logique, tout, etc. 
 
- 
+
+
+## Exécuter du code SQL via SPARK SQL 
+
+Cette partie se concentre sur le SQL fourni par Spark SQL. 
+A noter que Spark SQL propose les fonctionnalités d'une base de données. 
+On a en effet le découpage:
+* database: on peut créer une database et l'utiliser ensuite. D'ailleurs, la database par défaut de Spark SQL est `default`  
+* table: Spark va gérer la méta-donnée en interne quoi qu'il arrive. Spark contrôle la donnée d'une table dite managée (par Spark), mais dans le cas d'une _unmanaged table_. On peut la persister avec un `saveAsTable`.
+* vues: Spark gère des vues qu'on peut créer en SQL, ou depuis une dataframe. Elle ne stocke jamais d'information. On ne peut pas la persister ! 
+
+
+Le catalogue spark permet d'avoir plus d'information sur les bases créées, les tables, si elles sont temporaires ou non, etc. 
+
+
+### Tables et vues 
+
+Les tables gèrent de la donnée, et Spark gère leur méta-donnée (schéma, description, table, nom de colonnes, partitions, stockage, etc) dans ce qu'on appelle un _metastore_.
+La variable `spark.sql.warehouse.dir` définit d'ailleurs où cette méta-donnée est stockée. 
+Il y a deux types de tables en Spark: 
+1. _Managée_: spark gère la donnée et la méta-donnée. Un drop va supprimer la donnée 
+2. _Non managée_ (unmanaged): Spark gère la méta-donnée et accède à la donnée vue comme source externe (JDBC, Cassandra, etc). Un DROP TABLE n'a pas d'effet sur la donnée, elle supprime "juste" la méta-donnée. 
+
+A titre d'exemple:
+
+```
+from pyspark.sql.session import SparkSession
+from pyspark import SparkConf
+from os import remove,getcwd
+from os.path import join 
+from shutil import rmtree
+
+conf = SparkConf().setMaster("local[1]").setAppName("test")
+conf.set("spark.executor.heartbeatInterval","300s")
+conf.set("spark.network.timeout", "600s")
+conf.set("spark.sql.warehouse.dir","spark_md")
+conf.set("spark.sql.catalogImplementation","hive")
+
+with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
+    spark.sql("create database db")
+    spark.sql("use db")
+
+    # UNMANAGED table 
+    path = join(getcwd(), "data", "sales.csv").replace("\\", "/")
+    spark.sql("create table t_sales(ID INT,DATE STRING,AMOUNT DOUBLE) USING CSV OPTIONS (PATH='{path}', HEADER=True)".format(path = path))
+    spark.table("t_sales").show()
+    
+    # MANAGED TABLE
+    spark.sql("create table t_roles (ID INT, ROLE STRING)")
+    spark.sql("insert into t_roles values (0, 'TEST')")
+    spark.sql("select * from t_roles").write.option("path", join(getcwd(), "tables", "t_roles")).saveAsTable("t_roles")
+
+    spark.sql("drop table t_sales")
+    spark.sql("drop database db CASCADE")
+
+
+# clean content for a next run 
+remove("derby.log")
+rmtree("tables")
+rmtree("spark_md")
+rmtree("metastore_db")
+```
+
+
+On peut également utiliser le SQL pour la création de vues depuis d'autres tables ou vues:
+
+```
+create view v_roles(id int, name string) as select...
+```
+
+#### Cache 
+
+On peut mettre une table en cache. 
+Par défaut, la donnée est mise en cache dès l'appel. 
+On peut par contre préciser qu'on la cachera dès sa première utilisation (et pas tout de suite) avec `LAZY`. 
+
+```
+-- In SQL
+CACHE [LAZY] TABLE <table-name>
+UNCACHE TABLE <table-name>
+
+-- another more subtle example
+CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testData;
+```
+
+
+Un cache va avoir des [stratégie de stockage](https://spark.apache.org/docs/3.5.2/sql-ref-syntax-aux-cache-cache-table.html): 
+* mémoire seule 
+* disque et mémoire 
+* disque 
+
+
+#### Utiliser les dataframes comme des vues 
+Le principe est le suivant: 
+1. Créer sa session 
+2. Charger les dataframes 
+3. Les enregistrer avec un nom de table, soit pour la session (par défaut), soit globalement (pour toutes les sessions, avec `pyspark.sql.DataFrame.createGlobalTempView`)
+4. Faire du SQL sur ces données
+5. Eventuellement persister le résultat 
+
+
+Un catalogue permet de retrouver les dataframes enregistrées, leurs colonnes, etc. 
+En fait, on peut voir le catalogue comme la méta-donnée sur les tables enregistrées. 
+On peut également agir sur celui-ci en supprimant des view enregistrées. 
+
+
+```
+from pyspark.sql.session import SparkSession
+from pyspark import SparkConf
+from os.path import join 
+from os import getcwd
+
+conf = SparkConf().setMaster("local[1]").setAppName("test")
+conf.set("spark.executor.heartbeatInterval","300s")
+conf.set("spark.network.timeout", "600s")
+
+with SparkSession.builder.config(conf = conf).getOrCreate() as spark:
+    base = spark.read.option("inferSchema", True).option("header",True).csv("storage/base.csv")
+    # we may make it using sql
+    spark.sql(""" 
+    CREATE OR REPLACE TEMPORARY VIEW v_base USING csv
+    OPTIONS (
+      path {custom_path},
+      header "true",
+      inferSchema "true",
+      mode "FAILFAST"
+    )
+    """, custom_path = join(getcwd(), "storage","base.csv").replace("\\","/"))
+
+    spark.sql("select * from v_base").show()
+```
+
 
 # Sources 
 
 * Site officiel
 * Beginning Apache Spark 3 : with dataframes, spark SQL, Structured Streamings and Spark ML Library. Luu, 2021
+* Data Algorithms with Spark. Parsian, 2022
