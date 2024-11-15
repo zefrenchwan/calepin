@@ -263,6 +263,66 @@ print(instance)
 ```
 
 
+Le pattern singleton consiste à fournir une unique instance d'une classe. 
+La façon de le tester en Python passe par `is`, qui renvoie true si les deux objets sont à la même adresse mémoire (donc sont les mêmes). 
+Le test est donc que deux appels de la fonction de singleton soient toujours le même au sens de _is_. 
+Il y a plusieurs implémentations: 
+* la version par variable globale, unique, déclarée, et on teste si elle est None (auquel cas on la set) ou pas. Dans tous les cas, on retourne cette valeur. 
+* la version par métaclasse, plus complexe à mettre en oeuvre, mais qui cache complètement le singleton. 
+
+
+Avant de la présenter, voici un exemple introductif:
+
+```
+class ControlingType(type):
+    def __call__(cls, *args,**kwargs):
+        print("Allocation")
+        super(ControlingType, cls).__call__(*args, **kwargs)
+		
+class ConcreteType(metaclass = ControlingType):
+    def __init__(self):
+        pass
+    def action():
+        print("Hello")
+		
+p = ConcreteType()
+# va afficher allocation sur la sortie standard
+```
+
+On peut d'ailleurs réutiliser ce gestionnaire sur plusieurs classes. 
+L'usage pour singleton consiste à avoir un dictionnaire des instances créées, avec comme clé la classe. 
+Quand on fait un appel à `__call__`, le paramètre _cls_ va être la clé à chercher dans le dictionnaire des instances. 
+
+```
+class ControlingType(type):
+    _instances = dict()
+    def __call__(cls, *args,**kwargs):
+		# note the cls._instances
+        val = cls._instances.get(cls)
+        if val is not None:
+            return val
+        else:
+            res = super(ControlingType, cls).__call__(*args, **kwargs)
+            cls._instances[cls] = res
+            return res
+			
+class ConcreteType(metaclass = ControlingType):
+    def __init__(self):
+        pass
+    def action():
+        print("Hello")
+		
+# and then
+base = ConcreteType()
+for i in range(10):
+    current = ConcreteType()
+    if current is not base:
+        raise ValueError("failed")
+    else:
+        print("same")
+```
+
+
 
 
 # Sources
