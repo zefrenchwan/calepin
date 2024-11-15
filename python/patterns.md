@@ -1,50 +1,5 @@
-Le but de ce texte est de réaliser du code Python en utilisant les pleines capacités du langage. 
-
-* Copyright zefrenchwan, 2024
-* MIT License
-* Rien de publicitaire ou de contractuel / Pas de conflit d'intérêt
-
-# Exécution de code 
-
-
-## Les environnements virtuels 
-Avoir un seul environnement de python est compliqué ne serait ce que parce qu'on peut avoir besoin de dépendances différentes suivant les projets. 
-En inclure une nouvelle peut casser d'autres dépendances ou être incompatibles. 
-On utilise alors les environnements virtuels avec `venv`, pour avoir un environnement par projet. 
-
-```
-# créer un environnement dans path 
-python -m venv path 
-# aller dans path et lancer l'environnement virtuel 
-cd path 
-./bin/activate # linux  
-.\Scripts\activate.bat # Windows 
-```
-
-
-Une fois l'environnement virtuel activé, l'installation de package se base sur `pip`. 
-Certains projets utilisent pip en interne mais l'enrichissent: 
-* poetry 
-* pipenv 
-
-## Utilisation interactive de Python 
-
-L'idée est d'utiliser un outil interactif suivant une boucle REPL (read, eval, print, loop). 
-Bien sûr, il y a l'interpréteur de base, mais aussi: 
-* bpython: l'interpréteur de base amélioré avec la librairie curses, et d'autres features. Il reste un outil en ligne de commande 
-* ptpython: une version en ligne de commande aussi, avec gestion de la souris, ressemblant à jupyter pour son mode d'utilisation 
-* ipython: en ligne de commande, mais offre une meilleure gestion des packages et du calcul distribué
-* jupyter: version web d'ipython. Astuce: utiliser ? pour avoir de l'information sur un module, une fonction, etc
-
-
-Pour utiliser jupyter depuis l'environnement virtuel: 
-
-```
-pip install --upgrade jupyterlab
-# puis on le lance 
-python -m jupyter lab # qui va lancer le navigateur
-```
-
+Ce texte porte sur la mise en place des design patterns appliqués à Python. 
+Le but est d'écrire du code le plus proche du style python dans les problématiques courantes. 
 
 
 # Les principes de base 
@@ -188,7 +143,128 @@ if __name__ == '__main__':
     ...
 ```
 
+# Les patterns du Gang of four 
+
+On a trois types de pattern: 
+
+| Nom | Description |
+|-------------|--------------------|
+| Creational | Comment créer des objets |
+
+## Patterns de création d'objets 
+
+Le principe de _factory_ est de cacher les détails de création d'objets avec une méthode centrale qui va gérer les cas. 
+L'usage typique est d'avoir des classes différentes en fonction de certains paramètres, tous implémentant la même interface. 
+
+
+Le pattern _builder_ consiste à avoir construire un objet au fur et à mesure. 
+L'objet déclare quand il est fini, on applique des builders jusqu'à la fin. 
+Par exemple: 
+
+
+```
+from typing import Protocol
+
+# what to build 
+class House: 
+    def __init__(self):
+        self._counter = 0
+        self._name = "House of John Doe"
+    @property
+    def built(self):
+        return self._counter == 3
+    def incr(self):
+        self._counter = self._counter + 1
+    @property
+    def name(self) -> str:
+        return self._name
+		
+# builders 
+class Builder(Protocol):
+    def build(self, house: House):...
+
+class RoofBuilder:
+    def __init__(self):
+        pass
+    def build(self, house: House):
+        print(f"build roof in {house.name}")
+        house.incr()
+
+class WallsBuilder:
+    def __init__(self, number):
+        self._number = number 
+    def build(self, house: House):
+        print(f"building {self._number} walls in {house.name}")
+        house.incr()
+
+class WindowsBuilder:
+    def __init__(self):
+        pass
+    def build(self, house: House):
+        print(f"Adding windows in {house.name}")
+        house.incr()
+		
+# action part
+steps = [RoofBuilder(), WallsBuilder(5), WindowsBuilder()]
+house = House()
+while not house.built:
+    steps.pop().build(house)
+```
+
+
+Le pattern _prototype_ permet de cloner un objet. 
+Le but est d'avoir une copie qu'on peut modifier, tout en gardant l'original en mémoire. 
+Pour cela, on peut gérer un registry qui va garder les valeurs par un identifiant métier. 
+Ce registry va alors cloner la valeur de base (le prototype), et ensuite l'améliorer. 
+L'implémentation en python est assez souple puisqu'elle permet d'ajouter des attributs simplement. 
+
+```
+# ease cloning 
+from copy import deepcopy
+
+# basic object with attributes
+class Metadata:
+    def __init__(self, name:str, **kwargs):
+		# clever one: kw args to enrich structure, no map needed 
+        self.name = name.strip() 
+        for key in kwargs:
+            setattr(self, key,kwargs[key])
+            
+    def __str__(self):
+		# dynamicaly find attrs and group them all
+        values = []
+		# note that vars is the map of attrs 
+        for attr,val in sorted(vars(self).items()):
+            values.append(f'{attr}: "{str(val)}"')
+        return "Metadata { " + " , ".join(values) + "}"
+		
+m = Metadata("tables", db = "db", schema = "schema", table="t_data")
+print(m)
+
+# registry 
+# implementation is a fast one, missing unregister and more cases (not found, etc)
+class MDRegistry:
+    def __init__(self):
+        self._registry = {}
+    def register(self, md: Metadata):
+        self._registry[md.name] = md
+    def clone(self, name: str, **kwargs):
+        base = deepcopy(self._registry[name])
+        for key in kwargs:
+            setattr(base, key, kwargs[key])
+        return base 
+
+
+# use of registry 
+base = MDRegistry()
+base.register(Metadata("database"))
+instance = base.clone("database", db="db")
+print(instance)
+```
+
+
+
+
 # Sources
 
-* Mastering Python - Second Edition. Rick van Hattem, 2022
 * Mastering Python Design Patterns, 3ed. Kamon Ayeva, Sakis Kasampalis, 2024
