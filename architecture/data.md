@@ -47,7 +47,7 @@ Déjà, pour la culture, on distingue deux types de traitements pour les bases d
 * OLTP: on traite en temps réel et de manière transactionnelle de la donnée, sans agrégation 
 
 | Nom | But | Type |
-|-------|-------|
+|-------|-------|-----------|
 | OLTP | Faire tourner le business | SGBDR |
 | OLAP | Comprendre le business | DW |
 
