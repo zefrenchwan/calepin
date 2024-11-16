@@ -274,7 +274,7 @@ Une organisation fréquente est aussi par maturité:
 | Conformed / Base / Standardized | Donnée sous format unique, souvent parquet |
 | Cleansed / Refined / Enriched | Donnée nettoyée et enrichie |
 | Presentation / Curated / Analytics | Donnée agrégée et résumée | 
-| Sandbox | Donnée copie de raw pour les DS | 
+| Sandbox | Donnée copie de raw pour les DS, modifiable | 
 
 ## Stocker c'est bien, exploiter c'est mieux 
 

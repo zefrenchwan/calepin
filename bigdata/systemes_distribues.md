@@ -1,6 +1,6 @@
 # Systèmes distribués
 
-Copyright thefrenchwan, 2024
+Copyright zefrenchwan, 2024
 MIT License
 Pas de conflit d'intérêt (personne ne m'a payé ou contacté)
 
@@ -231,6 +231,58 @@ On passerait donc de la distribution du haut à celle du bas.
 ```
  
 __ATTENTION: Distribution uniforme de la donnée ne veut pas dire accès uniforme à la donnée__
+
+
+### Scatter / Gather (Disperser / regrouper)
+
+La problématique est le traitement d'une requête unique sur un système distribué. 
+Chaque worker va prendre sa part, ce qui permet de rendre beaucoup plus rapide (voire simplement possible) le traitement de telles requêtes. 
+Le pattern tient son nom de la structure arboresente du traitement: 
+1. La racine est la requête 
+2. Les feuilles sont les traitements par les workers 
+3. Les noeuds intermédiaires sont les opérations de dispersion (découpage en taches de base) et de rassemblement (agrégation pour traiter la requête). 
+
+
+Les calculs et possiblement la donnée sont partitionnés sur les workers. 
+Cette répartition peut être dynamique avec réallocation si un worker plante ou est trop lent.  
+Par exemple, sur une recherche dans un FS distribué, on cherche tous les documents contenant les mots m_1 à m_n. 
+L'idée est que chaque worker lise une sous partie des documents disponibles (si possible localement), et cherche dans chacun. 
+Pas de noeud intermédiaire, chaque worker renvoie la liste des documents qui correspondent, et la machine racine (le master) se charge de prendre l'union de ce que les workers lui renvoient. 
+
+
+Par contre, cette répartition n'est pas évidente: 
+* les sources sont elles partitionnées ? 
+* y'a t'il des goulots d'étranglement ? Disque, réseeau, mémoire, cpu ? 
+* prendre trop de noeuds coute en réseau: on passe son temps à échanger avec plein de workers. Chacun va recevoir la requête, la traduire, créer éventuellement une JVM, traiter, fabriquer le résultat et le renvoyer. Si le worker passe peu de temps à chercher dans le document, c'est sous optimal. 
+* prendre beaucoup de noeuds augmente la probabilité que l'un défaille ou réponde lentement. __Le temps de réponse est le temps maximum de réponse des workers__ et donc, si un est lent, la réponse est lente. Si la probabilité p de réponse en moins d'une seconde est de 99%, disons, avec N machines, la probabilité que tout le système réponde en moins d'une seconde est p**N
+
+| probabilité pour chaque worker | Nombre de workers | probabilité de plantage |
+|-----------|------------|---------|
+| 0.99 | 5 | 4.9% |
+| 0.99 | 10 | 9.5% |
+| 0.99 | 50 | 39.5% |
+| 0.99 | 100 | 63% | 
+| 0.98 | 5 | 9.6% |
+| 0.98 | 10 | 18.3% |
+| 0.98 | 50 | 63.6% |
+| 0.98 | 100 | 87% |
+
+### Gestion des évênements et fonctions comme service 
+
+Dans une architecture, on a le plus souvent un serveur d'applications qui tourne en permanence. 
+Il est en général gourmand en terme de ressources. 
+Certains clouds proposent de traiter des petites requêtes et de payer par requête, au lieu d'un serveur loué au temps. 
+C'est la notion de _Function as a service_, ou de _serverless computing_.
+En particulier, ce cloud peut gérer aussi bien la création et l'exécution des instances, mais aussi la gestion de la charge. 
+Il est indispensable de ne pas avoir besoin d'un état pour la gestion de l'événement ou de la fonction. 
+Cela ne veut pas dire que la dite fonction ne peut pas écrire dans une base, mais en tant que telle, son instance est détruite à la fin du traitement, et un éventuel état serait perdu. 
+L'outil est très pertinent pour des petits traitements rapides et sans état, souvent pour lancer d'autres services.  
+
+
+### Election de leaders pour gérer un traitement (ownership election)
+
+
+
 
 ## Sources
 
