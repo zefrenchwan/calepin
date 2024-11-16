@@ -15,7 +15,7 @@ Si on prend du recul, fondamentalement, une architecture data répond aux questi
 | Traitements | Pour l'exploitation et la validation |
 | Accès | API ? Interface utilisateur ? |
 | Sécurité | Contrôles d'accès, chiffrement |
-| Gestion de la vie privée | 
+| Gestion de la vie privée | Conformité légale, anonymisation |
 | Gouvernance | Qualité de la donnée, source, durée de stockage |
 
 
@@ -212,6 +212,71 @@ La fin des RDW est remise en cause du fait de la plus value réelle métier des 
 
 
 ## Les data lakes 
+
+La suprématie des bases relationnelles a posé question quand de nouveux types de données ont été exploitables: fichiers audio, video, csv, textes dont les mails, etc. 
+On avait la possibilité de les stocker massivement et l'envie de les exploiter. 
+L'autre problème avec les bases relationnelles au sens large était leur difficulté à gérer de très gros volumes (en général) et à mettre à jour souvent la donnée (RDW). 
+Ainsi, l'explosion des volumes de donnée et la facilité à stocker la donnée brute a crée le besoin d'un nouveau paradigme: les data lakes. 
+Voici un cas d'usage: 
+1. les commentaires des réseaux sociaux sont intégrés en textes dans un lake 
+2. Ces textes sont catégorisés (détection d'émotion). L'analyse spécifique des messages négatifs montre un lien avec des mots spécifiques
+3. Correction métier des sources de mécontentement et début de l'itération suivante 
+
+
+__Le principe est de stocker de la donnée massivement, sans schéma ou structure, et d'en faire sens à la lecture__ (schema on read).
+Il faut donc une énorme puissance de calcul pour lire cette donnée et en faire sens, en plus de la faculté de stockage. 
+En faire sens implique une phase de lecture, nettoyage, jointure avec d'autres données. 
+
+### Pourquoi utiliser un data lake ? 
+
+En complément d'un RDW, un lake est pertinent:
+* pour ses couts de stockage plus faibles qu'une base relationnelle, et le fait qu'il n'y a besoin à l'écriture d'aucun schéma. Ainsi, si le DW est la source unique de vérité, le lake devient la source unique de données, d'où repartir en cas de doute sur le traitement.
+* pour mettre en place des modèles de data science 
+* pour la partie exploratoire à partir de la donnée brute. Si elle se révèle pertinente, on peut l'inclure dans un processus ETL en production au lieu de le faire _a priori_. 
+* utiliser la puissance de calcul du lake pour préparer la donnée du DW, et écrire le WH seulement en cas de succès et le plus vite possible (pour réduire la durée de maintenance)
+
+
+Parce que le cout de stockage devient minime avec un lake, les processi exploratoires de données permettent par nature de créer de la valeur en regardant la donnée disponible. 
+La structure en fichiers est la plus utile aux data scientists, ce qui provoque l'explosion de l'analyse prédictive avec leur travail. 
+En conséquence, on retrouve l'analyse dite prescriptive qui utilise les modèles prédictifs pour prendre les meilleures décisions. 
+
+
+| Nom | Etape 1 | Etape 2 | Etape 3 |
+|-----------------|-------------|--------|--------|
+| Approche descendante | Structuration | Ingestion | Analyse |
+| Approche ascendante | Ingestion | Analyse | Structuration | 
+
+
+### Comment utiliser un datalake ? 
+
+#### Répartir la donnée 
+
+Même si idéalement on a une unique instance, il est possible d'avoir plusieurs data lakes:
+* par découpage géographique, métier (comme les data mesh), ou nature de la donnée (un data lake client et un data lake pour la donnée interne)
+* pour des raisons légales (RGPD) ou de souveraineté, de sécurité (séparation par niveau d'habilitation), ou pour séparer la production des tests 
+* pour une gestion des risques, avec un plan de _disaster recovery_
+* par durée de rétention ou séparation technique ou technologique
+
+
+Le problème est bien sûr les actions pour transférer la donnée de l'un à l'autre. 
+
+
+#### Structurer la donnée 
+La facilité de stockage n'est pas une excuse pour tout y déposer sans gouvernance. 
+
+
+D'abord, organiser la structure de fichiers. 
+On peut organiser par niveau d'accès (sécurité), avec des critères de partition, des répertoires par version, des backups, des dossiers de méta donnée, etc. 
+Une organisation fréquente est aussi par maturité:  
+| Nom de la zone | Description |
+|----------|------------|
+| Raw / Staging / Landing| Donnée brute, immutable |
+| Conformed / Base / Standardized | Donnée sous format unique, souvent parquet |
+| Cleansed / Refined / Enriched | Donnée nettoyée et enrichie |
+| Presentation / Curated / Analytics | Donnée agrégée et résumée | 
+| Sandbox | Donnée copie de raw pour les DS | 
+
+## Stocker c'est bien, exploiter c'est mieux 
 
 # Sources 
 
