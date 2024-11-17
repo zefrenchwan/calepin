@@ -281,7 +281,78 @@ L'outil est très pertinent pour des petits traitements rapides et sans état, s
 
 ### Election de leaders pour gérer un traitement (ownership election)
 
+Le besoin d'un leader de traitement se comprend bien pour des outils tels que Spark. 
+Ce leader va coordonner les traitements et les répartir sur le cluster. 
+Mais que se passe t'il si ce leader unique se plante ? 
+On aimerait éviter de reprendre le traitement. 
+Il lui faut donc un certain nombre de noeuds de secours pour continuer. 
+N noeuds vont être retenus et prendront la main si lui défaille. 
+Organiser ce système passe par une élection de leader. 
+Certains systèmes, kubernetes notamment, garantissent qu'un conteneur qui plante est redémarré, et éventuellement déplacé sur une autre machine si la machine a planté. 
+Il n'est pas nécessaire d'appliquer des algorithmes tels que Raft ou Paxos, des outils l'implémentent ou permettent de le mettre en oeuvre (consul, etcd, zookeeper). 
 
+
+## Les patterns de traitement par batch 
+
+Ces batchs doivent tourner le plus rapidement possible, donc être parallélisés et localement rapides. 
+C'est par exemple _Map Reduce_ qui a donné lieu à toute une industrie. 
+Mais il en existe d'autres. 
+
+
+### Queues de travail (work queues systems)
+
+Le schéma producteur consommateur s'applique particulièrement bien aux systèmes distribués. 
+Il est en plus indépendant du travail effectué par le système, d'où son isolation en tant que pattern. 
+Pour mettre en oeuvre une telle queue, on utilise: 
+* un service distribué 
+* chaque conteneur gère la queue en tant que telle 
+* dans ce conteneur, un ambassadeur permet de manipuler spécifiquement les objets. Ainsi, le même code de queue sera utilisé, l'ambassadeur se charge de la sérialisation-désérialisation spécifique (image, video, objets, json, etc). 
+
+```
+Container group:
+-----------------------------------
+
+Work queue <----> Work queue            <------->   External work 
+manager           source                            Queue source 
+container         container 
+                  (ambassador)
+```
+
+
+C'est déjà un bon début, mais la question est de savoir comment gérer dynamiquement la charge. 
+Si on a un nombre de machines fixe:
+* en cas d'énorme charge, les jobs vont s'empiler et potentiellement dépasser la capacité de la queue 
+* en cas de grosse charge, les jobs vont attendre d'avoir un worker disponible 
+* en cas de petite charge, des workers vont simplement ne rien faire 
+
+
+La queue ne va pas juste stocker et donner de la donnée, elle a intérêt à produire et donner de la statistique dans son usage: 
+* le taux entrant
+* le temps moyen de traitement mesuré comme la vitesse à laquelle une instance demande un nouveau job à traiter 
+* en fonction, on peut déterminer si la queue va saturer, quand, etc 
+
+
+Dans le cas de cloud, on aimerait avoir la possibilité d'avoir exactement assez de workers pour gérer la charge.  
+Ce qui veut dire que les statistiques de queue permettent l'allocation: 
+* de ressources dans la queue pour gérer de la donnée 
+* de ressources côté consommateur en fonction de la charge
+
+A noter que kubernetes le permet aussi, c'est le projet KEDA (Kubernetes Event Driven Autoscaling). 
+
+#### Le pattern du multi-worker 
+
+Quand un job est dépilé, il peut impliquer d'appeler plusieurs services: 
+* chercher la donnée 
+* analyser la donnée 
+* diffuser la donnée 
+* monitorer le traitement 
+
+
+Et donc, on confie côté consommateur la responsabilité à un traitement qui gère les autres. 
+On parle alors de _Multi Worker Aggregate_, qui va lancer les tâches les unes après les autres. 
+
+
+### Gestion des évênements en mode batch (event driven batch processing)
 
 
 ## Sources
