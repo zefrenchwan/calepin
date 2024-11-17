@@ -354,6 +354,174 @@ On parle alors de _Multi Worker Aggregate_, qui va lancer les tâches les unes a
 
 ### Gestion des évênements en mode batch (event driven batch processing)
 
+Si le système de queue est pertinent, on peut avoir à gérer des flux complets de transformation de données, ou _workflows_. 
+Un job est lancé, il donne lieu à plusieurs jobs à traiter ensuite, etc. 
+Simplement demander à un job de poster dans la queue la donné du job d'après peut ne pas suffire (ne serait ce que pour le debug ou pour faire le join entre des données sources). 
+Les patterns se basent sur une working queue comme brique de base mais vont la décorer pour fournir des fonctionnalités plus intéressantes. 
+__ATTENTION: le contenu de la queue est bien la donnée à traiter, pas les jobs en eux mêmes__
+* _copier_: copie la donnée source en plusieurs exemplaires. Le cas d'usage est de faire tourner deux traitements en parallèle sur la même donnée (analyse de sentiment et recherche d'entités nommées sur le même texte).
+* _filter_: laisse passer de la donnée correspondant à certaines conditions exclusivement. Si le système est distribué, il ne garantit pas nécessairement le même ordre 
+* _splitter_: pour le traduire en code `si condition(data) alors aller dans telle queue sinon aller dans telle autre`
+* _sharder_: répartir de la donnée suivant une fonction de répartition dite _sharding function_
+* _merger_: à partir de plusieurs flux entrants, produit un unique flux sortant (déduplication par exemple)
+
+#### Amélioration de la performance et de la fiabilité 
+
+Jusque là, l'hypothèse implicite était double: 
+* les consommateurs dépilent à la même vitesse 
+* les données traitées prennent le même temps indépendamment du worker qui les traitent
+* chaque traitement réussit 
+
+
+Imaginons qu'une machine ou un conteneur spécifique prenne plus de temps que les autres à traiter la donnée. 
+Plus généralement, imaginons un consommateur qui traite bien moins vite que les autres sa donnée. 
+La solution dite de vol de travail ou _work stealing_ consiste à lui retirer au niveau de la queue une partie du travail pour la redistribuer. 
+
+
+En cas de plantage d'un consommateur, on aimerait que la donnée soit remise dans la queue pour être retraitée par un autre. 
+Si le consommateur est juste lent, on risque cependant de faire traiter de nouveau la donnée. 
+C'est la question de l'idempotence: il faut que ce traitement soit possible. 
+Autre cas compliqué: c'est la donnée qui provoque le crash d'un consommateur. 
+Dans ce cas, si on la remet dans la queue, on risque de faire planter en cascade tous les consommateurs. 
+On peut mettre en place une politique de retry pour limiter les tentatives de traitement (problème dit du _work poison_). 
+On a alors deux queues: la queue des données en première tentative, et la queue des données en retry. 
+On met en place une politique de priorité: la première est prioritaire et le système laisse passer de temps en temps des messages de la seconde. 
+
+
+### Synchronisation dans les batchs 
+
+Le problème est d'attendre une condition (que toute la donnée soit disponible) pour lancer la suite du traitement. 
+On peut y arriver avec un merge sur N queues pour une seule sortie. 
+La sortie contient alors toute la donnée (par construction) et on peut agréger dessus. 
+C'est souvent un algorithme suffisant. 
+Mais il existe des cas plus complexes. 
+
+#### Le join 
+
+Imaginons qu'on ait un découpage de la donnée pour son traitement. 
+On n'a pas juste besoin de la donnée agrégée, mais d'attendre d'avoir récupéré toutes les parties pour reconstituer un bloc. 
+C'est par exemple le cas d'un flux vidéo qui est assemblé comme 30 ou 60 images par seconde, dans l'ordre, jusqu'à produire une seconde de vidéo. 
+Dans ce cas, un join va agréger la donnée par bloc. 
+On attend que toute la donnée du bloc soit arrivée pour produire le résultat. 
+
+#### Le reduce 
+
+Etant données N sources, on les regroupe en une seule sortie, jusqu'à avoir une seule sortie par type d'entrée. 
+C'est ce que fait la partie reduce de map reduce, qui produit pour une clé la liste des valeurs correspondantes. 
+Le reduce peut se faire en plusieurs temps, et se parallélise mieux que le join.
+
+### Surveillance et observabilité 
+
+Le log individuel n'est pas exploitable en l'état, il faut des outils pour les regrouper, les suivre, ou produire de la donnée pour mieux comprendre. 
+Des outils tels que Prometheus le permettent.
+On a intérêt à attacher une sorte d'ID fonctionnel dans les traitements, pour pouvoir les suivre isolément. 
+On parle de _correlation ID_, et il existe des outils pour les gérer, comme le projet _Open Telemetry_.
+Que ce soit par niveau de log, système émetteur, correlation id, on peut agréger la donnée et la visualiser à des fins d'analyse. 
+
+### Servir des modèles d'IA, inférer à partir des données 
+
+L'IA existe depuis des dizaines d'années, mais a pris la lumière avec les LLM et le deep learning. 
+Cette IA en particulier est basée sur des modèles, qui sont le poids des connexions du réseau de neurones sous jacent. 
+Ces poids sont appris par entraînement. 
+Le modèle est utilisé en soumettant une entrée, qui produit une prédiction, via une API dédiée (généralement un service web). 
+Cela pose quelques questions: 
+* la taille du modèle et la puissance de calcul nécessaire à sa mise en oeuvre. En particulier, certains modèles utilisent de la GPU. On a aussi l'apparition de _small languages model_, ou comment réduire la taille des modèles sans trop dégrader la performance 
+* la latence acceptable: combien de temps entre la requête et la réponse du modèle ? Vu sa taille, le modèle ne doit pas être téléchargé si possible, utilisé localement, probablement mis en mémoire ou en cache. 
+
+
+Par sa nature même, le modèle est entrainé puis livré. 
+Il a une faculté limitée à s'adapter à de la nouvelle information. 
+Le concept de RAG est donc: 
+1. Etant donnée une requête, chercher l'information contextuelle pertinente (géolocalisation de la personne, contacts, etc)
+2. La requête est reformulée et enrichie avec l'information contextuelle 
+3. Le résultat est produit et envoyé à l'utilisateur 
+
+L'information produite est plus pertinente. 
+Le modèle n'a pas besoin de tout savoir d'un utilisateur (meilleur pour sa vie privée).
+
+## Points d'attention dans la mise en place  
+
+#### The thumbering herd (émergence d'un comportement problématique)
+
+Individuellement, un utilisateur a un effet marginal sur les requêtes que gère un système. 
+Mais quand le système encourage une action, les utilisateurs la font en masse, ce qui peut créer un problème global par émergence. 
+Par exemple, une page lente ou une barre de progression cassée peut forcer 90% des utilisateurs à rafraichir leur page. 
+Le site va recevoir quasiment le double des requêtes habituelles. 
+Si on a été prévoyant pour que la charge constatée maximale frôle les 70% de la capacité réelle du système, on a un risque de dépassement. 
+Pour s'en prémunir: 
+* _jitter_: mettre en place un délai artificiel, aléatoire et court, avant d'envoyer une requête pour lisser la charge. Prenons le cas d'un retry avec un _exponential backoff_. Si tout le système plante en même temps, tous les retries vont avoir lieu en même temps. Pour l'éviter, on lisse cette charge de retry avec un jitter
+* _circuit breaker_: quand un sous système envoie trop de requêtes, il est temporairement sacrifié pour protéger tout le système et ne pas avoir un effet domino
+
+#### L'absence d'erreurs est une erreur 
+
+Un système complexe et distribué connait forcément des erreurs. 
+On a alors un nombre de base d'erreurs, qui est inhérent à ce genre d'architecture. 
+Dès lors, on ne voudra pas ne pas avoir d'erreur, mais que ce volume soit cohérent dans le temps. 
+On va regarder alors les variations d'erreurs, pas le volume en soi. 
+En particulier, pas d'erreur est pratiquement impossible. 
+
+
+#### Toutes les erreurs ne se valent pas 
+
+Le client peut envoyer des requêtes provoquant une erreur, même sans mauvaise intention. 
+Par exemple, une erreur dans la saisie du mot de passe va lever une erreur d'authentification. 
+Mais quand on a une explosion de ce nombre d'erreurs, c'est un vrai problème. 
+On a donc un volume de requêtes client en erreur "normal" qui sert de référence. 
+
+#### Les problèmes de versioning 
+
+On distingue: 
+* la version de l'API 
+* la version des traitements 
+* la version de la donnée stockée 
+
+En séparant bien les trois, on a la possibilité d'établir des retours en arrière. 
+
+#### Les composants optionnels qui se retrouvent pilier du système 
+
+Le cas le plus évident est l'ajout de cache, vu comme une simple astuce technique pour accélérer le traitement. 
+Sauf que sa mise en place va durer (parce que c'est facile) et le composant va rester (parce que le système en avait vraiment besoin). 
+
+#### Risque de perte de donnée 
+
+Attention sur la gestion du TTL de la donnée. 
+On organise en général du nettoyage au fur et à mesure. 
+Si ce code est buggé ou si le nettoyage est lancé à tort, le risque de perte de donnée est réel. 
+On le compense par la mise en place de sauvegardes et de _circuit breaker_ éventuellement. 
+
+#### La validation des entrées 
+
+Le nombre de requêtes possible est énorme, et avec lui, on s'attend à un certain pourcentage d'erreurs ou de cas à exclure.
+On peut bien entendu tester leur forme pour éviter des failles de sécurité (injection SQL par exemple). 
+Mais il va rester des cas que le système ne sait pas gérer. 
+Côté client, on envoie souvent la même requête. 
+Quand celle ci plante, ce qui était un détail coté développeur est critique pour le client, une sorte d'effet projecteur. 
+Donc, il s'agit de bien tester: 
+* par fuzzing du code 
+* par la validation d'un échantillon des données réelles 
+
+
+#### Traiter de la donnée inutile 
+
+Une requête a une durée de vie, et on peut exclure des requêtes devenues non pertinentes. 
+C'est le cas d'un utilisateur qui rafraichit sa requête (F5): on n'a plus besoin de servir sa requête initiale. 
+Autre exemple: sa déconnexion. 
+
+
+Pour faire la différence, plusieurs solutions: 
+* la requête a un timeout, une durée de vie, donc
+* le système va gérer ses ressources et en allouer dynamiquement pour arriver à traiter bien et assez rapidement une requête 
+* les requêtes d'un même client sont triées pour donner la priorité à la plus récente 
+
+#### Et si on réécrivait tout ? 
+
+Quand un système distribué semble de plus en plus problématique, la solution de tout réécrire peut être tentante. 
+Mais pour garder le SI à flot, il faut maintenir en attendant le premier système. 
+Donc, le second système est écrit et doit intégrer en plus les dernières évolutions du premier. 
+Cette course sans fin fait que le second système n'est jamais prêt et constitue un temps perdu inacceptable. 
+Sur les systèmes distribués, on a une solution. 
+S'il est bien conçu, ses composants sont faiblement couplés. 
+Donc il est possible au moins en théorie de le changer par bloc tant qu'on garantit les interfaces. 
 
 ## Sources
 
