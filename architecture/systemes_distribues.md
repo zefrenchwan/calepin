@@ -1,8 +1,8 @@
 # Systèmes distribués
 
-Copyright zefrenchwan, 2024
-MIT License
-Pas de conflit d'intérêt (personne ne m'a payé ou contacté)
+* Copyright zefrenchwan, 2024
+* License MIT 
+* Pas de partenariat
 
 ## Les bases 
 

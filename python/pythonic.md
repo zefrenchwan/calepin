@@ -1,8 +1,8 @@
 Le but de ce texte est de réaliser du code Python en utilisant les pleines capacités du langage. 
 
 * Copyright zefrenchwan, 2024
-* MIT License
-* Rien de publicitaire ou de contractuel / Pas de conflit d'intérêt
+* License MIT 
+* Pas de partenariat
 
 # Exécution de code 
 

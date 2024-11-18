@@ -1,3 +1,8 @@
+* Copyright zefrenchwan, 2024
+* License MIT 
+* Pas de partenariat
+
+
 # Kubernetes
 
 K8S pour les intimes est à la base un projet créé par Google en 2015 (première tentative en 2003 en C++, passé depuis en golang). 

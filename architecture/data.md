@@ -1,6 +1,6 @@
 * Copyright zefrenchwan, 2024
 * License MIT 
-* Pas de conflit d'intérêt (personne ne m'a contacté, je ne fais pas de pub cachée)
+* Pas de partenariat
 
 
 # Introduction 

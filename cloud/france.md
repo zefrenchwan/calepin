@@ -1,3 +1,8 @@
+* Copyright zefrenchwan, 2024
+* License MIT 
+* Pas de partenariat
+
+
 # Cloud français
 
 Le but de ce document est d'établir un panorama des cloud français dans une optique professionnelle. 

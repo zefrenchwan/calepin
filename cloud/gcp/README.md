@@ -4,8 +4,8 @@ Notes de lecture
 
 
 * Copyright zefrenchwan, 2024
-* MIT License
-* Pas de conflit d'intérêt (personne, pas Google notamment, ne m'a payé ou contacté pour ça)
+* License MIT 
+* Pas de partenariat
 
 ## Sources
 

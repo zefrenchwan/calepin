@@ -2,6 +2,11 @@
 
 Notes sur le système distribué d'Apache
 
+* Copyright zefrenchwan, 2024
+* License MIT 
+* Pas de partenariat
+
+
 ## Structure et installation 
 
 Le but est de faire des calculs sur des fichiers répartis et redondés au sein d'un FS dit HDFS.

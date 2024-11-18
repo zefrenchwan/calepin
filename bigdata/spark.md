@@ -1,3 +1,8 @@
+* Copyright zefrenchwan, 2024
+* License MIT 
+* Pas de partenariat
+
+
 # Spark 
 
 L'usage de jobs map reduce sur Hadoop a vite montré ses limites, notamment sur la gestion de plusieurs actions d'affilée. 

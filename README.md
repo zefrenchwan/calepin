@@ -5,8 +5,9 @@ Calepin est une sorte de carnet de notes sur des sujets importants.
 
 
 * Copyright zefrenchwan, 2024
-* MIT License
-* Aucun conflit d'intérêt, personne ne m'a contacté ou payé, rien de promotionnel
+* License MIT 
+* Pas de partenariat
+
 
 ## Sujets 
 
@@ -41,9 +42,9 @@ Chaque fichier a donc un statut qui peut être:
 | Nom | Description | Avancement |
 |-----------|----------|----------|
 | [Flink](https://github.com/zefrenchwan/calepin/blob/main/bigdata/flink.md) | Cours flink avec exemples | Traité |
-| [Hadoop](https://github.com/zefrenchwan/calepin/blob/main/bigdata/hadoop.md) | Cours hadoop général | Traité |
+| [Hadoop](https://github.com/zefrenchwan/calepin/blob/main/bigdata/hadoop.md) | Cours hadoop général | Suffisant |
 | [Kafka](https://github.com/zefrenchwan/calepin/blob/main/bigdata/kafka.md) | Présentation de Kafka | Suffisant |
-| [Spark](https://github.com/zefrenchwan/calepin/blob/main/bigdata/spark.md) | Présentation de spark avec exemples Java et Python | Suffisant |
+| [Spark](https://github.com/zefrenchwan/calepin/blob/main/bigdata/spark.md) | Présentation de spark avec exemples Java et Python | Traité |
 
 
 ### Cloud 

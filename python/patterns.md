@@ -1,6 +1,10 @@
 Ce texte porte sur la mise en place des design patterns appliqués à Python. 
 Le but est d'écrire du code le plus proche du style python dans les problématiques courantes. 
 
+* Copyright zefrenchwan, 2024
+* License MIT 
+* Pas de partenariat
+
 
 # Les principes de base 
 

@@ -1,3 +1,8 @@
+* Copyright zefrenchwan, 2024
+* License MIT 
+* Pas de partenariat
+
+
 # Kafka 
 
 Son cas d'utilisation typique est un problème de type producteur consommateur. 

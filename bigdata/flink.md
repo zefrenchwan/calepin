@@ -1,8 +1,8 @@
 # Apache Flink
 
 * Copyright zefrenchwan, 2024
-* MIT License 
-* Aucun conflit d'intérêt, je ne suis pas payé ou contacté par Flink ou Apache ou qui que ce soit
+* License MIT 
+* Pas de partenariat
 
 ## Pourquoi Flink ? 
 
