@@ -380,9 +380,241 @@ On trouve aussi bien des chercheurs, des développeurs ou des entreprises sur ce
 
 ## Les approches de conception générale 
 
+On verra dans le chapitre suivant les éléments spécifiques de conception pour une solution. 
+Ici, on parle de choix de solutions. 
+
+### OLTP vs OLAP 
+
+Un OLTP est une base de données relationnelle qui est utilisée pour les opérations transactionnelles sur de la donnée unitaire. 
+Par exemple, une gestion transactionnelle d'une opération d'achat d'un client (ouvrir une transaction, débiter, valider la commande, etc). 
+Il est optimisé en ce sens avec une très faible latence pour les opérations unitaires CRUD. 
+La donnée se mesure souvent en giga. 
+
+
+Un système OLAP répond à une problématique de rapports et d'analyse métier. 
+Il est donc très optimisé pour lire la donnée, généraliser ou zoomer à des niveaux différents (_slice and dice_). 
+On écrit la donnée une fois, on la lit très fréquemment. 
+
+```
+OLTP -- ETL --> DW --> OLAP 
+```
+
+
+La structure de base est le cube, qui contient de la donnée agrégée par un certain nombre de dimensions. 
+Une autre approche est la donnée dite tabulaire (_tabular data model_) qui consiste à utiliser un modèle par table sur laquelle on fait les opérations lors du calcul. 
+La donnée se mesure en tera octets, et elle vient de plusieurs systèmes OLTP.
+
+
+On parle alors de la _couche sémantique_ de donnée, parce qu'elle agrège et explique la donnée des OTLP.  
+Ce qui amène à distinguer deux types de données: 
+* la donnée opérationnelle, qui donne un état de l'information. On peut piloter son métier en temps réel 
+* la donnée analytique qui est la vue historique et explicative de l'information. On peut piloter son métier au long terme et prendre des décisions stratégiques 
+
+
+### SMP (un serveur) ou MPP (un modèle master worker)
+
+Il existe deux types de traitement (processing): 
+* Symmetric multi processing (SMP): un serveur unique qui traite la donnée. Au besoin, on rajoute de la puissance de calcul ou de la mémoire sur la machine. C'est l'approche historique
+* Massively Parallel Processing (MPP): un modèle master worker, qui a remplacé le SMP face à la limite physique des machines. C'est un système distribué en mode master (ou control) et workers. On rajoute des machines au besoin
+
+
+### Lambda architecture 
+
+Le principe est d'avoir deux flux de données: un lent mais sûr, et un le plus rapide possible. 
+Les deux sont réconciliés avant l'accès à la donnée (sur le niveau vue au sens vue sur la donnée). 
+Elle se caractérise par: 
+1. deux flux, dits _batch layer_ et _stream layer_. 
+2. Ces deux flux sont le moins couplés possibles, et ont une attribution de ressources qui leur est propre. Ils sont développés comme deux flux séparés. Les flux ont intérêt à être sans état ou spécificité pour que l'on puisse utiliser indépendamment une source ou l'autre sans se poser de question
+3. Une vue unifiée agrégeant les deux types de données (lent et rapide). On parle de couche de service. Elle décide si elle utilise la donnée la plus fraiche ou la plus sure
+
+
+ ### Kappa architecture 
+
+Spécifiquement pour le temps réel, l'architecture Kappa gère un flux de données unique et sans état. 
+Ses caractéristiques sont: 
+1. temps réel, l'événement est traité avec une latence proche de 0
+2. un flux unique. Cela facilite la montée en charge (exactement, la _scalability_) en distribuant la charge sur plusieurs machines 
+3. Sans état, ce qui permet de paralléliser au mieux sans maintenir un état partagé. N'importe quelle machine peut traiter n'importe quelle donnée de manière interchangeable 
+
+Elle n'a pas d'intérêt sur la donnée historique, car elle va charger la partie service avec des requêtes nécessitant beaucoup de calcul. 
+
+
+### Utiliser plusieurs sources dans la même application 
+
+C'est la notion de gestion polyglotte du stockage, ou _polyglot persistence_. 
+Concrètement, la donnée de chaque partie du SI peut être stockée dans un outil spécifique (graphe, document, clé valeur, SGBDR, etc). 
+Elle peut être agrégée ensuite dans un outil commun. 
+Le cout de montée en compétence sur ces technologies spécifiques est à comparer au cout de forcer une technologie commune (et à ses risques): faire du document avec un SGBDR peut devenir un casse tête. 
+
+
+## Approches de la modélisation de donnée 
+
+Le but est de prendre une donnée source et de l'amener dans un modèle relationnel. 
+La technologie source n'a pas d'importance. 
+La modélisation relationnelle est la mise en forme en 3NF de la donnée, ce qu'on fait naturellement. 
+La modélisation dimensionnelle est apparue en 1996, avec une organisation par faits et dimensions. 
+
+### Modélisation dimensionnelle 
+
+Les deux principales différences sont: 
+1. L'usage de la dénormalisation, pour s'économiser les jointures (hyper couteuses) 
+2. La présentation par fait / dimension, très orienté rapport  
 
 
 
+| Fait | Dimension |
+|---------------|--------------|
+| Mesure quelque chose | Caractéristise quelque chose |
+| Valeur numérique agrégeable | Valeur de type attribut (éventuellement hierarchisé) |
+
+Sur les dimensions, la gestion du changement (slowly changing dimension) prend trois formes: 
+* On réécrit la donnée, l'ancienne n'a plus d'intérêt. C'est le plus simple et le plus fréquent 
+* L'ancienne version est historisée, la donnée nouvelle donne l'état le meilleur et le plus récent 
+* Les deux données sont gardées (ancienne et nouvelle), les deux ont la même valeur et constituent l'historique de la donnée 
+
+### Common data model (Modèle partagé de donnée)
+
+Le principe est de bâtir un modèle propre à l'entreprise, et de ne pas prendre celui du fournisseur (cas du CRM) ou de la source de donnée. 
+On a un modèle en propre, l'ETL garantit le contrat, et chaque application client utilise le même modèle. 
+
+```
+App client     App client        App client 
+    |                |                 |
+MODELE PARTAGE DE DONNEES, QUE TOUS PARTAGENT 
+    |                |                 |
+Source 1           Source 2 .......  Source N
+```
+
+### Data vault 
+
+C'est un modèle de conception pour fabriquer un DW au niveau entreprise en utilisant trois concepts: 
+* les __hubs (ou centres)__ sont des concepts métiers fondamentaux. Par exemple,  les clients, les produits, etc. Ils sont stockés en entier, avec leur id en propre. Le stockage peut inclure de la donnée telle que la date de création, une clé partagée, etc 
+* les __links (ou liens)__ relient les centres et stockent les données comme des tables de correspondance (clé étrangère vers la donnée de base, donc sa clé primaire). 
+* les __satellites__ stockent les informations sur les centres et les relations entre eux. Très concrètement, c'est la donnée historique des hubs. 
+
+
+### Les méthodologies de modélisation de DW
+
+Ce sont les méthodes Kimball ou Immon. 
+
+#### Préliminaires: le modèle en étoile ou en flocon 
+
+[Le principe](https://www.databricks.com/fr/glossary/star-schema) est d'avoir: 
+* une table centrale, dite de faits, qui contient la clé étrangère de chaque valeur de dimension (pas la valeur, juste la clé), et les attributs associés
+* pour chaque dimension, une table qui contient la clé primaire de la dimension et sa valeur
+
+Le plan d'exécution est donc: 
+1. Trouver toutes les valeurs des dimensions qu'on cherche (`pays = fr`, `date = 20241201`), à raison d'une table de dimension par dimension 
+2. Aller chercher dans la table de faits les faits qui correspondent aux id des dimensions
+
+```
+DIMENSION: PAYS 
+id -> 1, valeur -> FR 
+id -> 2, valeur -> ES 
+
+
+FAITS 
+=====
+id_pays -> 1, id_secteur -> 17, id_année -> 2024, ... pib = beaucoup d'argent 
+
+
+DIMENSION: SECTEUR
+id -> 17, secteur -> Biens de consommation
+```
+
+[Le modèle en flocon](https://blog.developpez.com/jmalkovich/p8718/modelisation/modele_en_etoile_ou_en_flocons) est un modèle en étoile avec une hiérarchie des dimensions. 
+Pour une dimension donnée, elle est liée à son parent (par exemple région -> pays), le plus bas niveau est connecté à la table de fait. 
+
+
+```
+DIMENSION: CONTINENT 
+id -> 1, valeur -> UE
+
+
+DIMENSION: PAYS 
+id -> 1, id_continent -> 1, valeur -> FR 
+id -> 2, id_continent -> 1, valeur -> ES 
+
+
+FAITS 
+=====
+id_pays -> 1, id_secteur -> 17, id_année -> 2024, ... pib = beaucoup d'argent 
+
+
+DIMENSION: SECTEUR
+id -> 17, secteur -> Biens de consommation
+```
+
+#### Méthode d'Immon (dite top down)
+
+Le procédé est le suivant: 
+1. Copie de la source (OLTP) vers une zone dite de staging, sans transformation. Le but est de réduire la charge sur le système source, et permet un audit éventuel de la donnée source 
+2. Copie du staging vers la Corporate Information Factory (CIF), avec transformation et mise en 3NF de la donnée, sans agrégation. __ATTENTION: le CIF est la source unique et la plus détaillée de la donnée. Une seule instance de CIF au niveau de l'entreprise__. 
+3. Cette donnée du CIF est ensuite agrégée dans des data marts spécifiques, éventuellement mise en cube 
+4. Les data marts sont les sources d'un _reporting layer__ 
+
+```
+OLTP 1 -- Copie --> Staging area 1 -- ETL --> |          |--> Data mart 1 --> |
+...                                           |--> CIF --|                    |--> Reporting layer 
+OLTP n -- Copie --> Staging area n -- ETL --> |          |--> Data mart m --> | 
+```
+
+Le nom vient du fait qu'on commence par concevoir la couche de reporting, et on remonte vers les données sources. 
+
+#### Kimball (dite bottom up)
+
+La méthode de Kimball consiste en: 
+1. Prendre, comme Immon, la donnée source et la mettre dans un staging, sans transformation 
+2. Les tables staging sont agrégées dans des data marts spécifiques, suivant un modèle en étoile. __ATTENTION: les dimensions sont normalisées et centralisées (conformed dimension)__ : l'id de la valeur X pour la dimension D est le même dans tous les datamarts. 
+
+```
+OLTP 1 -- Copie --> Staging area 1 -- ETL --> Data mart 1 --> |
+...                                                           |--> Reporting layer 
+OLTP n -- Copie --> Staging area n -- ETL --> Data mart m --> | 
+```
+
+#### Les modèles hybrides 
+
+Le modèle hybride consiste à:
+* utiliser le CIF éventuellement, s'il est utile, sur une partie spécifique. 
+* un OLTP miroir, utilisé pour soulager l'OLTP source 
+
+
+## Ingestion de la donnée 
+
+Les problématiques sont: 
+* lire la donnée du système de traitement vers un DW (ELT ou ETL)
+* envoyer la donnée du DW vers les systèmes de traitement (reverse ETL)
+* batch à fréquence régulière ou gestion en temps réel  ? 
+* la gouvernance de la donnée 
+
+
+### ETL et ELT
+
+L'ETL est la méhode standard, mais l'ELT s'applique mieux aux data lakes. 
+* L'ETL charge la donnée, la transforme à la volée, et la sauve dans la destination. Si la transformation est buggée ou si elle échoue, il faut relire la source en entier. Il est très pertinent sur de petits volumes ou des transformations faciles 
+* L'ELT déplace la donnée, puis la transforme (et stocke le format final). Il est plus adapté aux énormes volumes de données et peut tourner depuis la première copie (et pas encore la source). 
+ 
+### Reverse ETL 
+
+En général, la donnée va du système opérationnel vers le DW. 
+Cependant, quand des systèmes opérationnels prennent des décisions avec de la donnée stratégique, on a besoin de faire l'inverse. 
+Par exemple, la donnée agrégée est utilisée pour l'apprentissage d'un modèle de machine learning. 
+Par exemple, exporter de la donnée client pour détecter les clients qui vont quitter l'entreprise (churn). 
+On parle alors d'_operational analytics_. 
+
+### Batch processing vs Real time processing 
+
+* Le mode batch tourne régulièrement sur d'énormes volumes de données 
+* le real time processing consiste en un flux de donnée qui arrive à destination, dans un contexte de réaction à des événements
+
+
+### La gouvernance de la donnée 
+
+Les problématiques sont: 
+* les méthodes de collecte, stockage, sécurisation, transformation et usage de la donnée (reporting notamment)
+* la validation de la qualité de la donnée, sa précision, sa qualité 
+* la conformité légale et réglementaire 
 
 # Sources 
 
