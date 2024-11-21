@@ -276,7 +276,113 @@ Une organisation fréquente est aussi par maturité:
 | Presentation / Curated / Analytics | Donnée agrégée et résumée | 
 | Sandbox | Donnée copie de raw pour les DS, modifiable | 
 
-## Stocker c'est bien, exploiter c'est mieux 
+## Gérer, stocker et traiter la donnée 
+
+
+
+### Les problématiques de stockage 
+
+Un _datamart_ est une partie métier d'un data-warehouse ( marketing, ressources humaines, finance, etc). 
+Il correspond donc à un flux sortant du DW vers chaque partie. 
+Cette spécialisation permet de développer des tables et indicateurs spécifiques. 
+Idéalement, les équipes métier sont autonomes sans dépendance au service IT pour ces développements. 
+Elles peuvent également appliquer une politique de sécurité et spécifiquement d'accès moins large que ce que propose l'IT. 
+
+
+
+Un _operational data store_ est une vue au niveau entreprise de la donnée. 
+Sa finalité est la présentation de la donnée en temps (quasi) réel, et sans profondeur d'historique.  
+__Attention: un ODS est une vue instantanée, il n'y a pas de composante analytique. En particulier, rien à voir avec un DW__ ! 
+Par contre, on peut appliquer des règles de nettoyage et des validations métier avant de valider la donnée dans l'ODS. 
+Ainsi, il sert de base de staging à un DW. 
+
+
+Ce qui nous donne l'architecture complète:
+
+```
+OLTP -- ETL --> base de staging ---- ETL -->|         |---> Data mart HR
+                                            |--- DW --|---> Data mart finance  
+OLTP -- ETL --> ODS - juste un transfert -> |         |---> Data mart marketing  
+```
+
+Un _data hub_ est un système de stockage qui sert à gérer ou échanger de la donnée entre deux systèmes. 
+C'est un support tactique _versatile_ en anglais, c'est à dire polyvalent. 
+Par exemple, servir de source de données à une marketplace. 
+
+
+En résumé: 
+
+| Usage / Capacité | Data hub | Data lake | RDW | Data calaog |
+|------------------|----------|-----------|-----|-------------|
+| But dans le SI | Distribution | Traitement, analytics | Traitement, analytics | Méta donnée |
+| Type de données | Brut (ou presque) | Brut ou nettoyé | Traité | Meta donnée |
+| Structuration | Tous types | Tous types | Structuré | Méta donnée |
+| Traitements | Intégration / Distribution | Calculs | ETL et requêtage | Rien |
+| Cas d'usage | Ingestion / Distribution | IA, ML, analytics | Analytics et prise de décision | Gestion et découverte |
+
+
+### Calculs et traitements 
+
+La _master data_ est la donnée qui fait foi, celle qu'on peut utiliser pour une exploitation ou prise de décision. 
+On parle de données de référence. 
+A ce titre, le _master data management_ est la gestion des sources de données maitres: 
+* l'ingestion et le nettoyage 
+* les transformations et fusions 
+* la structuration et la hiérarchie des données (données niveau entreprise, département, etc)
+* la validation technique et légale 
+
+
+La _data virtualization_ est l'idée d'avoir des vues logiques (comme un DW) mais sans déplacer la donnée. 
+Elle est liée au concept de _data federation_ qui consiste à ce que chaque partie du SI gère localement sa donnée (comme les états fédéraux aux USA), mais permettent de former un tout cohérent par la virtualisation. 
+Le but est de ne plus avoir un DW central, mais bien un moteur de virtualisation qui va cacher la donnée et la lire de la source au besoin. 
+Le _data virtualization engine_ va alors effectuer des requêtes dites fédérées, c'est à dire sur plusieurs sources.
+Son avantage est le gain par rapport à la mise en place d'un DW avec copie de la donnée. 
+Mais sa mise en place pose plusieurs questions: 
+* la performance et les calculs: utilisation de caches, optimisation, etc. 
+* le cout pour les systèmes sources qui sont requêtés comme back-end de l'engine 
+* la sécurité avec l'accès des données regroupées 
+* la fraicheur de la donnée, le nettoyage de la donnée du cache 
+
+
+Pour comparer: 
+
+| Axe d'analyse | Déplacer la donnée | Virtualiser la donnée |
+|---------------|--------------------|-----------------------|
+| Cout de stockage | Fort | Faible (index, cache) |
+| Cout de mise en place | Créer et maintenir l'ETL | Cout moindre |
+| Temps de mise en place | Long (ETL) | Court (itératif ou prototypage) |
+| Sécurité | Donnée dupliquée donc deux fois vulnérable | Réduit la surface d'attaque |
+| Fraicheur | A la fréquence de l'ETL | Récente |
+| Validité | Risque de décrochage | Celui de la source |
+
+
+
+Les _data catalogs_ sont une information centralisée sur les sources de données de l'entreprise: 
+* serveurs et infrastructure 
+* databases, schémas, tables, lien entre les éléments 
+* processi d'ETL, et en général les logiques de transformation 
+* qualité de la donnée, propriétaires, contraintes légales 
+* scripts SQL de comment la donnée est gérée ou traitée
+* sur le lake, les fichiers, leur structure 
+
+
+### Acquisition de la donnée 
+
+Il existe des _data marketplaces_ permettant: 
+* à l'acheteur de visualiser, noter, évaluer le produit vendu. 
+* au vendeur de valoriser et monétiser son patrimoine de donnée 
+
+
+Leur cas d'utilisation typique reste de la donnée pour faire tourner des modèles. 
+On trouve aussi bien des chercheurs, des développeurs ou des entreprises sur ces marchés. 
+
+
+
+## Les approches de conception générale 
+
+
+
+
 
 # Sources 
 
