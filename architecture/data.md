@@ -616,6 +616,106 @@ Les problématiques sont:
 * la validation de la qualité de la donnée, sa précision, sa qualité 
 * la conformité légale et réglementaire 
 
+
+# Les architectures de données 
+
+Pour saisir le problème, cette grille d'analyse offre un panorama de la problématique: 
+
+Dans la classification de l'usage de la donnée, on peut établir quatre niveaux: 
+| Question | Méthode | Valeur | Difficulté |
+|----------|---------|--------|-------------|
+| Que s'est il passé ? | Descriptive | Faible | Faible |
+| Pourquoi ça s'est passé ? | Diagnostic | Moyen | Moyen |
+| Que se passera t'il ? | Prédictive | Haute | Haute |
+| Comment faire pour que ça se produise ? | Prescrictive | Enorme | Enorme | 
+
+
+
+La présentation va suivre l'ordre chronologique d'apparition. 
+
+
+## Modern data-warehouse (MDW)
+
+
+Si on reprend la grille d'analyse ci-dessus, il y a deux versions: 
+1. L'analyse du passé, possible avec des solutions telles que des RDW 
+2. L'exploration et donc la fabrication de modèles pour la prédiction et la prescription. Cette nature exploratoire rend le data lake le plus adapté à ce besoin 
+
+
+Le concept est d'avoir les avantages du data-warehouse (donnée agrégée) sans latence. 
+La capacité affichée du MDW est de permettre les deux approches. 
+La solution technique passe par de la réplication de donnée dans un RDW, en plus de la présence d'un lake. 
+__C'est la solution proposée par les principaux fournisseurs de cloud, donc Google avec un BigQuery (DW) et le système de traitement complet (GCS, Dataflow, etc)__ 
+Attention, il s'agit d'une architecture haut niveau, on peut tout à fait: 
+* combiner un stockage on-premise et des calculs dans le cloud
+* développer un ETL qui termine dans un RDW on premise, et mettre toute la donnée non structurée ou non évaluée dans un cloud. Ce cloud aurait la charge de gros calculs. Une application de reporting utiliserait les deux sources (cloud et RDW on premise)
+* l'usage temporaire de ressources externes (cloud) pour des calculs lourds
+
+Le principe est le suivant: 
+1. Tous les types de données, du moins structuré au plus structuré, sont stockés dans leur format initial. Streaming, batch, tout est possible. Attention à la bande passante nécessaire et la fréquence des batchs. 
+2. La donnée est copiée le plus brut possible dans une zone de bac à sable pour que les data scientists la travaillent. On comprend alors qu'on peut faire preuve de pragmatisme et évaluer la donnée avant, quitte à intégrer directement la donnée hyper structurée dans un RDW
+3. La donnée est raffinée au fur et à mesure jusqu'à être intégrable dans un RDW 
+4. Faire tourner les modèles et les traitements des sources se fait par la puissance de calcul et de stockage de l'outil en général 
+
+```
+Donnée de base --> raffinement progressif    --> RDW  --> visualisation et exploitation par les analystes
+               --> copie dans un bac à sable --> lake à usage des data scientists  
+``` 
+
+## Data fabric 
+
+Si la définition a minima du MDW consiste à faire coexister un datalake et un RDW, la data fabric est l'idée de le pousser plus loin: 
+* en puissance de calcul (virtualisation de données, traitements en temps réel)
+* en offrant la possibilité de gérer par API ou créer des API 
+* en intégrant des outils de sécurité nativement, et des politiques d'accès aux données. En particulier, la proposition de valeur est aussi la gestion de contraintes d'ordre légal (dont la GDPR)
+* en mettant aussi l'accent sur la gouvernance et le data management (metadata catalog, master data management). Le metadata catalog n'est pas juste la méta donnée, mais aussi l'historique de la donnée (pas que la méta donnée), les sources, les transformations 
+* en créant une plateforme unifiée où les outils coexistent et forment un tout cohérent 
+
+
+Les arguments mis en avant pour le passage d'un MDW à une data fabric se fondent sur les constats suivants: 
+* les données changent beaucoup et souvent en structure 
+* les besoins en calcul sont très variables (problématique dite de scalabilité)
+* le besoin en temps réel est de plus en plus fort 
+
+
+## Data lakehouse 
+
+La proposition de valeur est d'avoir un stockage unifié entre les données non structurées d'un lake et les données en 3NF des RDW. 
+En particulier, on peut utiliser le DML de SQL (insert, delete, update), et une commande de merge (appelée _merge_...).
+Databricks l'a théorisé avec sa notion de delta lake. 
+La fondation Apache s'en est saisie aussi avec Apache Iceberg et Apache Hudi. 
+
+
+Sur le principe, on dispose d'un _relational service layer_ qui comprend des commandes très proches du SQL. 
+Les requêtes sont traduites en jobs qui vont lire les fichiers et traiter la requête. 
+Pour le DML (au sens large avec merge), il est lui aussi traduit en traitements qui traitent et modifient les fichiers. 
+Ces traitements se fondent sur un journal de changement des fichiers dans le lake (comme un SGBDR). 
+__Par contre, écrire du SQL Like n'est pas disposer du paradigme relationnel !__
+La structure sous jacente reste celle d'un FS, ce qui impose les limites suivantes:
+* Application du schema à la lecture (schema on read)
+* La gestion ACID n'est pas à prendre au pied de la lettre: les fichiers sont modifiés transactionellement, mais pas au global. 
+* Pas possible de définir de relation entre les données dans les fichiers. Le système peut le faire via des vues mais elles seront calculées au moment de la requête
+
+
+## Data mesh 
+
+Le concept se définit par quatre principes: 
+1. Des équipes indépendantes travaillent chacune à leur domaine métier 
+2. Une cohérence globale est garantie avec une politique générale décidée au niveau de l'entreprise suivie de tous 
+3. L'infrastructure sous jacente est prévue pour être variable, avec des mécanismes de provisionnement 
+4. La donnée est vue comme un produit pour fabriquer de la valeur. Elle doit être utilisable pour tout usage d'entreprise, surtout ceux non initialement prévus (le client de la donnée peut en faire ce qu'il veut, dans les limites du bon sens et de la loi)
+
+
+C'est bien un concept et pas une architecture déjà définie. 
+En particulier, on peut utiliser des architectures propres aux solutions précédemment évoquées. 
+
+
+### Architecture de données décentralisée 
+
+
+
+
+
 # Sources 
 
 * Deciphering Data Architectures. James Serra, 2024
