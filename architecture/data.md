@@ -712,6 +712,82 @@ En particulier, on peut utiliser des architectures propres aux solutions précé
 
 ### Architecture de données décentralisée 
 
+Le département informatique en tant que tout ne va pas gérer le développement d'un unique data-warehouse centralisé. 
+La raison mise en avant est qu'à certains volumes, les systèmes centralisés (les DW en particulier) ne tiennent plus la charge. 
+La réalité est plus compliquée: c'est souvent avant tout une équipe IT désorganisée ou en sous effectif, ou bien de mauvais choix techniques. 
+Toujours est il que les data mesh proposent une nouvelle stratégie: 
+* chaque domaine (au sens métier) gère son propre entrepôt, il en devient l'utilisateur et le responsable pour le reste de l'entreprise 
+* ce domaine métier gère toute la partie technique, de la collecte à la présentation, et donne lui même les modalités et droits d'accès à l'entreprise 
+* la donnée n'est pas copiée dans un système central, elle reste dans le stockage du domaine 
+
+
+### Les grands principes
+
+#### Reprendre la responsabilité de gérer les domaines 
+
+Les équipes les plus proches du domaine sont les mieux placées en tant qu'expertes pour: 
+* faire grandir le système à hauteur de la charge nécessaire pour fabriquer l'entrepôt 
+* gérer le plus vite possible les changements métier, car les utilisateurs sont le plus proche de l'équipe de développement technique 
+* garder la vue sur l'usage et les accès à la donnée. Quand au contraire la donnée devient la propriété d'une équipe centrale d'IT, l'équipe source en perd l'usage 
+
+#### La donnée comme produit 
+
+Penser la donnée comme un produit signifie que la donnée a une valeur métier et doit être considérée comme le tout minimal cohérent et livrable qui répond à un besoin métier.
+Chaque domaine produit de la donnée comme produit et les services qui l'utilisent deviennent les clients de cette donnée. 
+Ainsi, chaque domaine se place dans une configuration de producteur: 
+* en fournissant une infrastructure pour gérer leur donnée, sans que ce soit une question pour un service IT ou les consommateurs 
+* la donnée, évidemment, et sa méta-donnée. L'équipe a donc à sa charge la sécurité, le contrôle des accès, etc
+* Les échanges de données comme produit sont alors pensés suivant un contrat de donnée pensé pour l'extérieur. Ce peut être en exposant une API, en utilisant une base de donnée exposée aux autres, en mettant à disposition des fichiers 
+* chaque domaine gère son IT et utilise ce dont elle a besoin en terme d'infrastructure 
+
+#### Les équipes des domaines utilisent l'infrastructure selon leur besoin 
+
+Le principe est que les équipes des domaines vont se spécialiser sur leur domaine. 
+Pas question pour eux de gérer leur infrastructure et d'avoir à résoudre chacun de leur côté la même question. 
+Le service informatique global assure l'infrastructure comme un service, c'est à dire que les équipes domaine vont se positionner comme utilisateurs de l'infrastructure selon leurs besoins. 
+
+#### La gouvernance centrale, les domaines comme fédérations 
+
+En fait, l'équipe IT globale va définir des règles de gouvernance et chaque équipe va appliquer cette politique à son domaine. 
+Par exemple, cette équipe globale va s'informer sur la RGPD et définir des bonnes pratiques. 
+Chaque équipe domaine va devoir appliquer les bonnes pratiques qui la concernent. 
+Cependant, elles ont leur marge de manoeuvre. 
+Par exemple, dire que l'accès à la donnée sensible doit passer par une gestion des droits est décidé globalement. 
+Mais telle équipe utilisera telle solution technique, et pas telle autre parce que son besoin est différent. 
+
+### Architecture logique d'un data mesh 
+
+#### Le domaine métier de la donnée 
+
+L'usage du DDD (domain driven design) n'est pas une évidence): 
+* parce que sa mise en oeuvre est complexe et longue 
+* parce que son application à la donnée est compliquée: que veut dire un domaine donnée ? Par exemple, quand on parle de produit ou de client, la frontière entre une application et un domaine métier est compliquée, et la question de la responsabilité très difficile (équipe produit ? Vente ?)
+
+
+Il y a trois types de domaines de donnée dans un data mesh: 
+1. Les domaines de données alignés sur la source: aucune transformation entre le système source et la donnée. 
+2. Les domaines de données agrégées: ce sont les données condensés de sources multiples. Leur usage typique est la gestion technique de la performance 
+3. Les domaines de données alignés sur les consommateur: de la donnée agrégée et prête à l'utilisation pour un consommateur de donnée 
+
+#### Le découpage logique 
+
+Il consiste à partir des sources et à arriver jusqu'aux consommateurs de la donnée: 
+1. On liste les sources 
+2. On créé un domaine métier qui va en général traiter un type de donnée (source, agrégé, ou client)
+3. Ces domaines métier ont des dépendances les uns avec les autres, les uns avec les sources, les autres avec les consommateurs 
+4. On en déduit alors un graphe de dépendance et une spécialisation de donnée 
+
+
+Il y a alors une topologie de l'architecture, avec trois possibilités: 
+1. Le type I: une répartition logique, mais en fait, tout le monde utilise le même support technique, un data lake global. Tous stockent la donnée au même endroit, avec des répertoires pour chaque domaine 
+2. Le type II: la répartition logique donne lieu à un data lake par domaine. Mais tous utilisent in fine  le même socle technique. Par exemple, l'entreprise utilise globalement un cloud provider (disons GCP), mais chaque équipe peut utiliser telle ou telle partie des outils du dit provider 
+3. Le type III: chaque domaine est totalement autonome sur son stockage et sa technologie 
+
+| Type | Technologie | Stockage |
+|------|-------------|----------|
+| I | Commun | Commun |
+| II | Commun | Spécifique |
+| III | Spécifique | Spécifique |
 
 
 
