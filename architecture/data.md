@@ -718,7 +718,16 @@ La réalité est plus compliquée: c'est souvent avant tout une équipe IT déso
 Toujours est il que les data mesh proposent une nouvelle stratégie: 
 * chaque domaine (au sens métier) gère son propre entrepôt, il en devient l'utilisateur et le responsable pour le reste de l'entreprise 
 * ce domaine métier gère toute la partie technique, de la collecte à la présentation, et donne lui même les modalités et droits d'accès à l'entreprise 
-* la donnée n'est pas copiée dans un système central, elle reste dans le stockage du domaine 
+* la donnée n'est pas copiée dans un système central, elle reste dans le stockage du domaine comme source de vérité. __ATTENTION: ça n'exclut pas qu'elle soit copiée ailleurs ou transformée par d'autres domaines__ 
+
+
+Pour réaliser une transition vers un data mesh, depuis un système centralisé, on peut utiliser un modèle de transition: 
+* définir les contrats de donnée et les domaines 
+* fabriquer les flux depuis le système centralisé vers le modèle décentralisé 
+* stabiliser ensuite en utilisant, en cas d'échec, la solution centralisée comme solution de secours 
+* s'assurer de la transition de culture 
+* mettre en place et optimiser les flux vers les domaines 
+
 
 
 ### Les grands principes
@@ -763,6 +772,9 @@ L'usage du DDD (domain driven design) n'est pas une évidence):
 * parce que sa mise en oeuvre est complexe et longue 
 * parce que son application à la donnée est compliquée: que veut dire un domaine donnée ? Par exemple, quand on parle de produit ou de client, la frontière entre une application et un domaine métier est compliquée, et la question de la responsabilité très difficile (équipe produit ? Vente ?)
 
+En revanche, on peut tout à fait partager un modèle commun de connée (_common data model_). 
+Pour éviter les duplicats, il faut mettre en place des ID partagés. 
+
 
 Il y a trois types de domaines de donnée dans un data mesh: 
 1. Les domaines de données alignés sur la source: aucune transformation entre le système source et la donnée. 
@@ -790,7 +802,37 @@ Il y a alors une topologie de l'architecture, avec trois possibilités:
 | III | Spécifique | Spécifique |
 
 
+### Quand adopter ou  ne pas adopter un data mesh ? 
 
+La solution n'a rien de magique: 
+* sa mise en place est plus longue que les autres architectures 
+* elle ne remplace pas un lake ou un entrepôt de données, elle en créé plusieurs instances décentralisées 
+* elle n'a pas vocation à être le meilleur atout technique pour les énormes volumes de données. Les causes d'échec des solutions précédentes sont plus souvent dues à des choix techniques inadaptés ou à des équipes incompétentes
+* le concept de data mesh ne donne pas de détail d'architecture. Sa mise en oeuvre concrète peut prendre des mois à concevoir. La notion de source unique de vérité va poser question. Elle devient possible à mettre en oeuvre dans un data mesh mais c'est un choix IT de gouvernance 
+
+
+# Quelle architecture ? 
+
+On reprend et on résume. 
+Comme tout résumé, il ne rend pas honneur à la complexité du produit, mais se veut une explication en une phrase du concept. 
+
+
+| Nom | Principe |
+|---------|------------|
+| Relational DW | Donnée agrégée et centralisée dans un SGBDR |
+| Data lake | Toute la donnée est stockée en l'état dans un énorme FS |
+| Modern DW | Un lake pour stocker et transformer, finit dans un RDW |
+| Data Fabric | Offre enrichie de MDW (sécurité, MDM, API, etc) |
+| Data lakehouse | Lake avec les fonctions d'analytics, mais sans RDW |
+| Data mesh | Concept de donnée décentralisée organisée en domaine | 
+
+
+
+Si on prend de la hauteur, on peut alors établir des profils d'entreprises qui ont intérêt à mettre en oeuvre telle ou telle technologie:
+* __Les modern data warehouses__: peu de donnée, familier avec le modèle relationnel 
+* __les data fabric__: beaucoup de données de sources différentes, avec l'accent mis sur l'intégration facile des flux 
+* __les data lakehouse__: solution intermédiaire, choix de non choix, permettant facilement un retour en arrière en fonction des succès et limites rencontrés
+* __les data mesh__: quand l'enjeu de passage à l'échelle est le coeur du problème, pour les entreprises traitant d'énormes volumes de données et souhaitant un investissement fort et à long terme 
 
 # Sources 
 
