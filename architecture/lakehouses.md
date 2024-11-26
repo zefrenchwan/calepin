@@ -94,8 +94,235 @@ Il y a aussi des offres commerciales: Snowflake, Databricks, Dremio et Starbrust
 
 # Les modern data platforms 
 
+Basiquement, les architectures sont passées d'une approche unique (DW puis lake) à une approche combinant les deux solutions. 
+
+## Data-warehouse ou data-lake
+ 
+Historiquement, la première méthode d'amélioration de la décision au niveau de l'entrprise a été la mise en place d'un data-warehouse. 
+La solution était de collecter la donnée de chaque source dans l'entreprise, de regrouper et nettoyer la donnée pour finalement l'intégrer dans un DW central pour la prise de décision stratégique. 
+Les avantages ont été la facilité d'analyse sur de la donnée très structurée. 
+Mais il a montré ses limite: 
+* l'augmentation de volume a été à l'origine du concept de "big data" quand les limites de cette solution ont été atteintes
+* pas de gestion de temps réel ou de temps court, aucune solution de streaming 
+* la transformation de la donnée a été un problème pour les solutions d'IA et de ML en particulier 
+* la solution liait stockage et calcul, et surtout était souvent propriétaire et couteuse 
+
+
+Ce besoin croissant de ML et d'IA a provoqué un vif intérêt pour les solutions de stockage permettant de traiter tous les types de données. 
+En particulier, Hadoop a été perçu comme une bonne solution pour traiter les limitations des DW. 
+Les principaux apports sont: 
+* la gestion de la donnée pour tout niveau de structuration 
+* l'approche de schema on read, c'est à dire qu'on peut tout stocker, et on définit ce qu'on a besoin de lire après coup 
+* le stockage dit _immutable storage_ au sens d'une donnée non modifiée 
+* le matériel comme _commodity hardware_ au sens d'un outil beaucoup moins cher (un serveur de stockage) que la mise en place d'un serveur très cher dédié au DW. Le stockage disque de base est moins cher qu'un serveur énorme pour faire du DW
+
+S'est alors mis en place la notion de data lakes avec une méthode: 
+1. Intégrer les données directement des sources. En particulier, il devenait possible de mettre en place des batchs, bien sûr, mais aussi du quasi temps réel 
+2. Traiter cette donnée pour les applications IA et ML 
+3. Agréger et nettoyer cette information pour les usages de rapports et visualisation de la donnée 
+
+
+Hive en particulier permettait de lire la donnée dans une logique de DW, bien qu'aucune solution pure DW ne soit apparue. 
+Cependant, le constat était mitigé: 
+* on pouvait mettre en place du ML et de l'IA
+* Hive comme MapReduce, en plus depuis un stockage disque, créait une différence nette avec les solutions hyper optimisées que propose un DW 
+* Pas de support pour l'ACID 
+
+## Arrivée des modern data platforms 
+
+Les solutions de DW traditionnelles et Hadoop sont toutes des solutions on-premise. 
+Pousser la problématique dans le cloud a donné lieu aux modern data platforms, qui se définissent comme ces solutions (lake et dw) dans le cloud pour: 
+* avoir la possibilité de mieux gérer la charge 
+* ne plus avoir à gérer ses infrastructures (plus de DBA, plus d'administrateur Hadoop)
+* la réduction des couts en payant uniquement à l'usage, l'optimisation de la performance en choisissant les caractéristiques de stockage et de calcul 
+* une meilleure intégration des solutions nouvelles 
+* accélérer la livraison en facilitant la mise en production
+
+Fondamentalement, il y a deux approches pour la mise en place d'une modern data platform: 
+* approche unique: _cloud data lake_ ou _cloud data warehouse_
+* approche combinée, donc les deux. Le principe est d'intégrer la donnée dans le cloud et spécifiquement dans un data lake. Ensuite, toujours dans le cloud, on part du data lake et on met en place les bonnes transformations pour arriver au _cloud data warehouse_ 
+
+
+Avec du recul, la proposition de valeur client est la suivante:  
+* la gestion de tous les cas d'usage, y compris les nouveaux dont l'Iot, les images, les sons, les logs. On attend à pouvoir les intégrer et à réaliser des rapports et des analyses en les utilisant 
+* la gestion de la charge, la flexibilité en changeant de format ou en ayant le bon outil technique, et la mise en place de solution ouvertes sans format propriétaire 
+* des outils d'optimisation de la charge et des couts 
+* approche orientée utilisateurs, avec la prise en compte des cas d'usage analytiques 
+* la réduction des délais de mise en oeuvre pour faire face aux changements, y compris la possibilité de traiter des nouveaux cas d'usage encore inconnus à date. On parle d'_agile and future proof_ 
+
+## Comparer un lake, un warehouse ou un lakehouse 
+
+Pour comparer ce qui peut l'être, il faut prendre la version cloud de chaque solution. 
+Petit rappel: ce document est un résumé des arguments fournis dans les sources, pas de prise de position de son auteur. 
+Le fait que les lakehouses n'aient quasiment pas d'inconvénient pose en particulier question. 
+
+### Avantages et inconvénients de chaque solution 
+
+#### Le standalone cloud data warehouse 
+
+Les avantages: 
+* Cette solution a un domaine d'application spécifique: analytique et prise de décision. 
+* L'architecture est simple conceptuellement et validée par des années d'expérience. 
+* En particulier, les solutions (open source ou commerciales) sont très optimisées et le couplage fort stockage / calcul les rend très performantes. 
+* Excellent outillage pour les ETL 
+* Cette structuration forte de la donnée permet de bien contrôler la donnée et des traitements ACID 
+* Possibilités d'optimisation avec les index, partitions, vues matérialisées 
+* la donnée est plus simple à traiter, donc les cycles de développement sont plus courts 
+
+Les inconvénients: 
+* pas adapté aux cas ML et IA
+* effort conséquent pour traiter de la donnée non structurée 
+* du fait de solutions spécifiques, le partage n'est pas simple avec des clients et nécessite souvent une API d'accès 
+* Support limité pour Spark et Python, mais ça s'améliore 
+* la donnée est agrégée, il n'y a pas de solution native de gestion ligne à ligne. Certains fournisseurs offrent une gestion des versions ligne à ligne, mais pas tous
+* les solutions propriétaires et le matériel entrainent des couts énormes 
+
+#### Le standalone cloud data lake 
+
+Les avantages:
+* bonne gestion de la donnée non structurée, et donc parfaitement adapté aux cas ML et IA 
+* gestion du temps réel comme du batch 
+* partage de données avec les clients plus facile 
+* Cas d'usage parfait pour Spark 
+* Faible cout de stockage 
+
+Les inconvénients: 
+* gestion limitée mais possible des besoins BI 
+* pas de support (ou très limité) du SQL 
+* pas de possibilité de modifier la donnée (données immutables une fois stockées)
+* pas de gestion ACID, pas de support de transactionnel 
+* on ne peut suivre les versions que des fichiers, pas au ligne à ligne 
+* Il n'y a pas de garantie de qualité de la donnée, la gouvernance est compliquée. Cela peut entrainer une baisse de confiance chez l'utilisateur du service 
+
+#### Approche combinée en général 
+
+Les avantages: 
+* supporte tous les niveaux de structuration de la donnée 
+* gestion efficace de la BI (via le DW) et des cas ML et IA (via le lake)
+* une fois traitée, la donnée du DW est bien structurée 
+
+
+Les inconvénients: 
+* besoin de synchroniser en permanence le lake et le warehouse 
+* la donnée la plus structurée dans le DW reste difficile à partager 
+* complexité des flux de données 
+* qualité de la donnée source variable, en particulier, le schema on read peut rendre la donnée dure à exploiter 
+* la gestion de la sécurité, en particulier garantir la cohérence entre le lake et le warehouse 
+* le cout inhérent à la présence des deux couches de stockage, et le cout de traitement 
+
+#### Les lakehouses 
+
+Les avantages: 
+* architecture en deux couches facile à comprendre et utiliser 
+* bien mis en oeuvre, a de bonnes performances coté BI 
+* gestion unifiée du batch et du stream avec les bons outils techniques 
+* gestion des schémas et de l'évolution des schémas 
+
+Les inconvénients: 
+* peu de recul sur la solution par rapport aux autres 
+
+
+
+# Le stockage 
+
+Le stockage d'un lakehouse doit fournir des fonctionnalités de recherche rapide de l'information, de gestion ACID de la donnée, et la gestion du temps pour les données. 
+
+## Les trois niveaux dans la gestion des fichiers
+
+Un facteur clé de la performance est de lire le minimum possible de données. 
+Le premier choix important est de savoir si le stockage fichier va être centré ligne (_row storage_) ou colonne (_columnar storage_).
+Dans le premier cas, on lit toute la ligne quand on y accède. 
+Dans le second, on ne lit que son id et la colonne souhaitée. 
+Ensuite, on peut utiliser des index, de la méta donnée (min et max de telle colonne), des critères de partition. 
+
+
+Spécifiquement sur les lakehouses, il y a trois couches de stockage: 
+1. Le stockage cloud. Il assure l'accès à la donnée: sa durabilité, sa disponibilité, sa sécurité, la montée en charge du stockage, la gestion du cout 
+2. les données stockées dans des formats ouverts. Certains formats sont compressés, d'autres incluent une gestion des schémas. L'autre facteur clé du choix est la gestion de sa performance d'accès et la facilité à retrouver l'information. Certains formats (ORC notamment) ajoutent une gestion transactionnelle, des indexes, la gestion des structures de données (struct, listes, dictionnaires)
+3. les données au format open table (en fait, une famille de formats) pour améliorer les performances et ajouter la gestion transactionnelle de la donnée. Hive a rapidement montré ses limites: lent, pas de modification ou suppression des fichiers, pas de support ACID. Trois solutions sont apparues: Apache Iceberg, Apache Hudi, Delta lake 
+
+## Les formats open table 
+
+Deux points d'attention: 
+* __il s'agit bien de formats de stockage de fichiers, au niveau du stockage et pas du calcul__
+* __un format de fichiers n'est pas un fichier avec un format, mais bien possiblement des fichiers portant différentes informations__
+
+### Apache Iceberg 
+Le produit est à l'origine né chez Netflix, adopté depuis par Apple, Netflix et AirBnb. 
+Dremio, Snowflake et Tabular le gèrent. 
+Avant d'en donner une vue détaillée, voici un cas d'usage. 
+Spark va lire et passer du SQL sur les fichiers au format open table. 
+Il "suffit" de le configurer pour l'interfacer avec Iceberg, et on peut passer du SQL au style Iceberg. 
+On dispose alors des fonctionnalités d'Iceberg en passant du SQL à la sauce Iceberg. 
+
+
+Au niveau du fonctionnement, on va détailler: 
+* __Iceberg n'est pas à proprement parler un format de stockage de fichier, mais un format de stockage de tables, se basant sur le stockage existant des fichiers pour les décorer en tables__
+* La couche calcul va créer des tables au format Iceberg et insérer de la donnée. Iceberg va s'appuyer sur le stockage pour créer et gérer la donnée qu'on insère
+* Iceberg maintient un _data catalog_ qui contient de la méta donnée pour chaque table. Chaque fois que la table est modifiée dans sa structure, une nouvelle version de la méta donnée est créée, mais Iceberg garde toutes les versions. 
+* Iceberg utilise cette méta donnée pour gérer les fichiers de donnée. Ces fichiers peuvent être stockés en Avro, parquet, etc 
+
+
+[Plus spécifiquement](https://iceberg.apache.org/spec/#overview): 
+* chaque table est décrite dans un metadata file. Il contient les partitions, les informations sur les snapshot, le schema, etc. A chaque changement, un nouveau fichier est créé, le catalogue pointe vers la dernière version valide du metadata file 
+* les manifest files stockent les informations sur les data files, avec des informations statistiques sur les colonnes
+* les manifest lists gèrent un _snapshot_ de la table, donc les données de la version correspondante à ce snapshot. On ne veut pas réécrire à chaque fois la table, donc ces manifest lists font le lien entre les metadata files et les manifest files
+* les data files peuvent être soit en parquet, avro 
+```
+CATALOG                   META DONNEE                                                       DONNEE 
+
+Iceberg 
+catalog 
+
+- table 1 -- pointeur --> meta data file --> manifest list --> manifest file --> data files  
+- table 2 -- pointeur --> meta data file --> manifest list --> manifest file --> data files 
+```
+
+
+### Apache Hudi 
+
+C'est Uber qui a initié le projet en interne, et le nom vient de Hadoop Upserts, Deletes and Incrementals. 
+Il dépasse la seule partie open table format, mais on peut l'utiliser uniquement à cette fin. 
+Le principe est d'avoir une partie méta donnée (dans un répertoire `.hoodie`) et de la donnée partitionnée. 
+Les fonctionnalités sont: 
+* gestion ACID, suppression et mises à jour 
+* _time travel_ 
+* optimisation des performances avec du clustering (regroupement au même endroit de données similaires), des index, de la compaction 
+* l'historisation des commits (_commit timeline_)
+
+
+### Linux Foundation Delta lake 
+
+Initialement développé par Databricks, le projet a été confié à la Linux Foundation. 
+Il permet de gérer Spark, PrestoDB, trino notamment. 
+Il met en place aussi une gestion par de la méta donnée, avec des fichiers pour gérer les transactions. 
+La table qu'il gère est appelée une _delta table_. 
+Ses spécificités sont: 
+* la gestion des schémas avec le rejet de la donnée si elle ne le vérifie pas, ainsi que la mise à jour des schema 
+* la possibilité d'écrire dans les tables par batch ou streaming avec la même interface 
+* le _vacuum_ permet de supprimer de la donnée historique au choix 
+* le _cloning_ permet de cloner une table sans la réécrire 
+
+### Lequel choisir ? 
+
+Iceberg: 
+* supporte parquet, Avro et ORC 
+* s'intègre bien avec AWS, GCP, Dremio, Tabular et Snowflake 
+
+Hudi: 
+* gère parquet et ORC, pas Avro 
+* s'intègre bien avec AWS et Onehouse 
+
+Delta lake: 
+* gère très bien Spark 
+* ne gère que Parquet 
+* très bonne intégration avec Azure, Databricks, Microsoft Fabric
  
 
 
 # Sources
 
+* Practical lakehouse architecture. Thalpati, 2024
+* [Apache vs parquet](https://www.decube.io/post/what-is-apache-iceberg-versus-parquet)
+* [Documentation officielle Iceberg](https://iceberg.apache.org/docs/latest/)
+* [Structure du format Iceberg](https://iceberg.apache.org/spec/)

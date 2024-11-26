@@ -36,7 +36,7 @@ Chaque fichier a donc un statut qui peut être:
 |-----------|----------|----------|
 | [Architecture data en général](https://github.com/zefrenchwan/calepin/blob/main/architecture/data.md) | Architecture data | Suffisant |
 | [Systèmes distribués](https://github.com/zefrenchwan/calepin/blob/main/architecture/systemes_distribues.md) | Patterns importants sur les systèmes distribués | Suffisant |
-| [Lakehouses](https://github.com/zefrenchwan/calepin/blob/main/architecture/lakehouses.md)| En cours |
+| [Lakehouses](https://github.com/zefrenchwan/calepin/blob/main/architecture/lakehouses.md)| Zoom sur les lake houses | En cours |
 
 ### Big data 
 
