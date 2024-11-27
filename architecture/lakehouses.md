@@ -269,7 +269,7 @@ Au niveau du fonctionnement, on va détailler:
 * les manifest lists gèrent un _snapshot_ de la table, donc les données de la version correspondante à ce snapshot. On ne veut pas réécrire à chaque fois la table, donc ces manifest lists font le lien entre les metadata files et les manifest files
 * les data files peuvent être soit en parquet, avro 
 ```
-CATALOG                   META DONNEE                                                       DONNEE 
+CATALOG                   META DONNEE                                            DONNEE 
 
 Iceberg 
 catalog 
@@ -318,6 +318,76 @@ Delta lake:
 * ne gère que Parquet 
 * très bonne intégration avec Azure, Databricks, Microsoft Fabric
  
+## Les data catalogs 
+
+Il y a deux types de méta donnée: 
+* la méta donnée technique: tel attribut est potentiellement nul, tel attribut est de type varchar de longueur maximale 100, etc. Certains formats (Parquet, ORC, Avro) portent l'information sur les méta données 
+* la méta donnée métier: c'est la sémantique du champ 
+
+La gestion de la méta donnée en général consiste en: 
+* la création de la méta donnée et sa lecture depuis tous les systèmes (internes et externes)
+* le suivi les différentes versions de cette méta donnée 
+* l'organisation de la méta donnée de la manière la plus ergonomique pour faciliter la découverte de la donnée par les utilisateurs techniques et métier 
+* l'ajout du contexte métier à la donnée technique 
+
+
+Les catalogues (sous entendu de données) servent exactement à cette fin: présenter la méta donnée, donc facilitent la recherche de la bonne donnée et la découverte d'opportunités métier. 
+Ils s'appuient sur un _metastore_ qui est un _repository_ de stockage de toute la métadonnée. 
+C'est un schéma général de conception que reprend Hive avec son Hive Metastore et son catalogue dit Hive catalog. 
+Il faut évidemment une gestion de droits utilisateurs à accéder ou pas à telle ou telle méta donnée. 
+Ainsi, __le catalogue est la vue que voit tel ou tel utilisateur, et c'est le metastore qui gère le stockage et la sécurité__ (le découpage des catalogues se fait souvent par business unit, mais ça n'est pas la seule solution). 
+En particulier, il permet:
+* de classifier la méta donnée et l'organiser. Par exemple en domaines (ventes, clients), en niveaux de développement (prod, dev) ou par niveau d'accès (public, client, interne, secret). On peut aussi ajouter des tags à de la donnée, par exemple PII pour 'personally identifiable information' qui a un impact légal évident
+* une gouvernance de la donnée, et notamment le contrôle des accès. On peut l'utiliser à des fins d'audit, ou pour donner des autorisations à des clients 
+* le suivi des transformations ou _data lineage_ en pouvant observer toutes les transformations, tous les champs avant et après. On peut s'en servir pour du debug ou une étude d'impact 
+
+
+Quand on gère un lake et un warehouse, on a alors à trouver un moyen d'unifier les métastores et donner une vision commune. 
+Sur un lake, la partie catalogue est plus compliquée par rapport à la manipulation de donnée aussi structurée qu'un DW. 
+
+### Mise en  place 
+
+Tous les fournisseurs de cloud (cloud providers) proposent un service de catalogue. 
+Mais le metastore d'Hive est aussi très utilisé. 
+
+#### Hive metastore 
+
+Hive a pris rapidement dans l'écosystème Hadoop. 
+Son metastore est devenu un produit utilisé à part entière, par exemple Spark qui utilise un metastore hive à la demande, ou Flink. 
+AWS et Databricks proposent une solution pour l'utiliser, même s'il faut gérer à part le stockage du metastore d'Hive. 
+
+#### AWS
+
+AWS propose l'usage du metastore d'Hive, mais aussi une solution propre: le Glue Data catalog. 
+Avec les formats de données compatibles, des crawlers Glue vont lire la donnée et la méta donnée pour alimenter son catalogue. 
+Athena, l'équivalent de BQ chez AWS, sert à l'exploration de données, et s'interface avec ce catalogue pour gérer les droits des utilisateurs. 
+A l'inverse, Spark Hive ou presto peuvent utiliser ce catalogue pour gérer les méta données. 
+Amazon offre aussi un service, dit _amazon data zone_ qui ajoute les fonctions métier à ce catalogue technique. 
+
+#### Azure 
+
+Pour la mise en place d'un lakehouse avec Azure:
+* l'offre coté stockage s'appelle Azure Data Lake Storage
+* l'offre coté calcul s'appelle Synapse Analytics, avec Synapse Spark (pour du Spark) et Synapse Serverless SQL (pour ... du SQL organisé en pools)
+* sur la partie méta données, il s'agit de microsoft purview. Il sert à proposer une vision partagée entre la partie lake (synapse lake database gère la méta donnée) et SQL (gérée par synapse SQL database). Purview gère toutes les fonctionnalités de catalogue, y compris la sécurité 
+
+#### GCP 
+
+GCP est compatible avec Iceberg.
+Le stockage se fait avec GCS, la méta donnée est gérée dans Big Lake, et Dataplex gère la gouvernance. 
+Dataplex est un service GCP qui permet de découvrir, gérer ses liens (_data lineage_) et gouverner la donnée. 
+Big Lake est un service GCP qui: 
+* fournit des contrôles d'accès très fins pour les services d'accès à la donnée (dont Spark ou BigQuery). 
+* fournit un metastore pour l'accès aux tables Iceberg, et synchronise ces tables avec Dataproc et BigQuery 
+
+#### Databricks 
+
+Il propose une offre multicloud, avec un catalogue de données spécifique, le _Databricks Unity Catalog_ (noté DUC). 
+Même principe que les autres, les fichiers sont déposés sur un stockage, la méta donnée est enregistrée dans le DUC.
+Il permet la gouvernance dont la sécurité, et s'interface par exemple avec Databricks SQL pour la gestion des permissions. 
+
+
+
 
 
 # Sources
