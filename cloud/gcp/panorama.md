@@ -75,3 +75,20 @@ Questions usually test:
 
 
 # Big data ecosystem 
+
+
+
+Originally developped at Google, **MapReduce** became a standardized framework. 
+A master job deals with scheduling, distributing, failover, while workers process data. 
+**Hadoop** arrived in 2006, with four main modules: common, HDFS, YARN and MapReduce.
+**HDFS** splits a FS to a name node (meta data) and many data nodes that contain replicated data for fault tolerance. 
+**YARN** uses a master worker model with a resource manager that deals with distribution and interacts with node managers. 
+**Pig** is a high level procedural language to join, load, filter data. 
+**Spark** came due to limitations of MapReduce: to chain jobs, one had to wait for all IO to disk, then read back the data.
+Each intermediate calculation then meant an extensive use of disks. 
+To deal with this, best solution was to keep it all into memory, using RDD (resilient distributed datasets). 
+
+
+**For the exam**, questions will be about:
+* why migrate from on premise to the (google) cloud, and how 
+* Google tools equivalents of Hadoop solutions (for instance dataproc, a managed hadoop service)
