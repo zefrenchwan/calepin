@@ -48,23 +48,10 @@ Chaque fichier a donc un statut qui peut être:
 | [Spark](https://github.com/zefrenchwan/calepin/blob/main/bigdata/spark.md) | Présentation de spark avec exemples Java et Python | Suffisant |
 
 
-### Cloud 
-
-| Nom | Description | Avancement |
-|-----------|----------|----------|
-| [France](https://github.com/zefrenchwan/calepin/blob/main/cloud/france.md) | Panorama des clouds français | Esquisse |
-| [Gcp](https://github.com/zefrenchwan/calepin/tree/main/cloud/gcp) | Préparation de la certif Profesionnal cloud DE | Esquisse |
-
 ### Devops 
 
 
 | Nom | Description | Avancement |
 |-----------|----------|----------|
 | [Kubernetes](https://github.com/zefrenchwan/calepin/blob/main/devops/kubernetes.md) | Survol de kubernetes | Suffisant |
-
-### Python 
-
-| Nom | Description | Avancement |
-|-----------|----------|----------|
-| [Patterns](https://github.com/zefrenchwan/calepin/blob/main/python/patterns.md) | Implémentation des patterns en python | En cours |
-| [Pythonic](https://github.com/zefrenchwan/calepin/blob/main/python/pythonic.md) | Comment écrire du vrai python | Esquisse |
+| [Terraform](https://github.com/zefrenchwan/calepin/blob/main/devops/gcp.terraform.md) | Terraform appliqué à GCP | Suffisant |
