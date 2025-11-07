@@ -38,6 +38,18 @@ Installation is not a click and run process, it needs to follow the [guide](http
 2. `docker compose up airflow-init` will do the magic for the default installation
 3. `docker compose up` will start airflow 
 
-
 To be sure it works, open the `localhost:8080` webpage. 
-Default login and password are `airflow`. 
+Default login and password are `airflow` (source: [here](https://airflow.apache.org/docs/apache-airflow/stable/tutorial/pipeline.html)).
+
+
+## Step three: install environment to develop 
+
+Many possible solutions for deal with the python installation. 
+Solution in here will be the classical virtual environment with an install: `pip install apache-airflow`. 
+
+
+
+# Sources 
+
+* *Apache Airflow Fundamentals*, by Alfredo Deza
+* *Official documentation* : https://airflow.apache.org/docs/
