@@ -1,0 +1,151 @@
+\documentclass[11pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\newtheorem{definition}{Définition}
+\newtheorem{exemple}{Exemple}
+\newtheorem{remarque}{Remarque}
+\newtheorem{postulat}{Postulat}
+
+\title{Une trousse à outils conceptuelle sur les graphes}
+\author{Jean Baylon}
+\date{Version du \today{}}
+
+\begin{document}
+	
+	\maketitle
+	\tableofcontents
+	
+	\chapter{Définir un graphe}
+	
+	Si l'on prend les définitions de base, un \textbf{graphe} est un concept qui se décline en trois notions : 
+	\begin{itemize}
+		\item \textbf{son orientation} : si les liens qui le composent ont un sens en plus d'une direction. Un graphe non orienté est par définition la donnée de sommets (formant $S$) et de liens vus comme parties de $S$ à deux éléments, donc les ensembles de type $\{a,b\}$ avec $a \neq b$ (sans boucle) ou $a=b$ (boucle). Les graphes orientés sur $S$ ont comme liens les paires ordonnées $(a,b)$ avec $a \neq b$ (sans boucle) ou $a=b$ (boucle)
+		\item la présence de plusieurs liens de même sommets, qui caractérise les \textbf{multigraphes}. Dans ce cas, le lien reliant $a$ et $b$ peut exister en plusieurs exemplaires. Une formalisation passe par un index, par exemple $(a,b,0)$ et $(a,b,1)$ sont deux liens, différents par leur index
+		\item la \textbf{valuation} des liens. On se donne alors un troisième ensemble $V$ et une fonction associant à un lien $l$ une valeur $v(l) \in V$. 
+	\end{itemize}
+	
+	\vspace{0.5cm}
+	On peut unifier les concepts en envisageant un graphe comme un ensemble de sommets $S$ et de liens $L$. La sémantique d'orientation ou de valuation est alors portée par $L$. Par exemple, on considère pour les graphes orientés valués que $L$ est la donnée de deux fonctions (origine et destination), d'un ensemble $V$ et d'une valuation des liens. Donc, $L = (\sigma,\delta,v,V)$, $\sigma : L \rightarrow S$ donne l'origine du lien, $\delta$ sa destination, et $v : L \rightarrow V$ est la valeur du lien. 
+	
+	\begin{definition}
+		Nous définissons un graphe comme la donnée de deux ensembles $S$ et $L$. Les sommets forment un ensemble non vide, et les liens portent plusieurs informations en fonction du besoin : 
+		\begin{itemize}
+			\item pour un graphe non orienté, $L$ comprend une fonction associant à un lien l'ensemble des sommets du lien comme partie de $S$ à un ou deux éléments. Pour un graphe orienté, on se donne $\sigma,\delta: L \rightarrow S$ l'origine et la destination du lien. 
+			\item Pour un graphe valué, $L$ comprend l'ensemble des valeurs permises $V$, et une fonction de valuation $v : L \rightarrow V$. 
+		\end{itemize}
+		
+		Dans tous les cas, le voisinage d'un sommet est l'ensemble des liens ayant ce sommet comme origine (graphe orienté) ou passant par ce sommet (graphe non orienté). En pratique (et nous l'appliquerons), un graphe a toujours un nombre fini de sommets et de liens. La théorie mathématique n'impose pas de contrainte de finitude. 
+	\end{definition}
+	
+	\paragraph{Les \og{}Labeled Property Graphs (LPG)\fg{}} sont une implémentation des graphes comme bases de données. Les liens et les sommets ont un identifiant globalement unique, des propriétés sous la forme de couples (clé, valeur) et un ensemble de \og{}labels\fg{} leur attribuant une sémantique. 
+	
+	\paragraph{La réification} est l'opération permettant de considérer des liens de liens, en réifiant un lien comme un noeud. Le but est d'attribuer une sémantique forte à des liens. Par exemple, un mariage entre deux personnes est un lien, a priori, mais peut être lui même vu comme sujet à des relations avec d'autres noeuds, tels que de la jalousie de la part d'une tierce personne. Une représentation peut être de considérer que les liens d'un graphe sont simplement des sémantiques. Pour reprendre le mariage, on aurait $$Jaloux(Paul, Mariage(Pierre, Julie))$$ Jaloux, les personnes et Mariage sont des noeuds d'un graphe, et les liens sont de type \og{}sujet\fg{}, \og{}objet\fg{}, etc. 
+	
+	
+	\section{La notion de parcours}
+	
+	Prenons un graphe orienté $G = (S,L)$ simple (sans boucle). Reprenons les fonctions d'origine $\sigma : L \rightarrow S$ et de destination $\delta : L \rightarrow S$ définies précédemment. 
+	
+	Il convient de distinguer un \textbf{chemin} (une séquence spécifique de liens) du \textbf{parcours} (l'exploration systématique du graphe). 
+	
+	Pour un noeud $s \in S$, on note $V^+(s) = \{ l \in L \mid \sigma(l) = s \}$ l'ensemble de ses liens sortants. Les sommets directement accessibles depuis $s$ sont simplement les destinations de ces liens, c'est-à-dire l'ensemble $\{ \delta(l) \mid l \in V^+(s) \}$. 
+	
+	À partir de ce mécanisme, on peut définir par récurrence l'ensemble $C_n(s)$ des \textbf{chemins de longueur $n$} partant d'un sommet $s$ :
+	\begin{itemize}
+		\item \textbf{Initialisation ($n=1$)} : L'ensemble des chemins de longueur $1$ partant de $s$ correspond exactement à l'ensemble des liens sortants $V^+(s)$.
+		\item \textbf{Hérédité ($n+1$)} : Un chemin de longueur $n+1$ s'obtient en prenant un chemin $c \in C_n(s)$ de longueur $n$ (dont le sommet final est $x$) et en lui concaténant un lien sortant de $x$. Formellement : 
+		$$C_{n+1}(s) = \left\{ (c, l) \mid c \in C_n(s) \text{ et } \sigma(l) = \text{destination}(c) \right\}$$
+	\end{itemize}
+	
+	Si l'on s'intéresse non pas aux chemins eux-mêmes, mais aux sommets que l'on peut atteindre, on peut étendre ce mécanisme à une famille finie de sommets $F \subset S$. On définit alors le parcours comme la découverte successive des \textbf{ensembles de sommets accessibles} en $n$ étapes, notés $E_n(F)$ :
+	\begin{itemize}
+		\item $E_0(F) = F$ (à l'étape 0, on se trouve sur les sommets de départ).
+		\item $E_{n+1}(F) = \bigcup_{x \in E_n(F)} \{ \delta(l) \mid l \in L, \sigma(l) = x \}$
+	\end{itemize}
+	
+	
+	L'ensemble $E_n(F)$ des sommets atteints exactement à l'étape $n$ constitue la \textbf{frontière} (ou le front d'exploration) du parcours. Ainsi, le parcours itératif d'un graphe consiste à trouver le voisinage sortant de chaque sommet de l'étape $n$, et à prendre l'union des noeuds destinations pour former l'étape $n+1$.
+	
+	\begin{table}
+		\centering
+		\begin{tabular}{|l|l|}
+			\hline 
+			\textbf{Nom} & \textbf{Description} \\
+			\hline 
+			Lien orienté & Lien allant d'un sommet à un autre \\
+			\hline 
+			Chemin de longueur $n$ & $n$-uplet de liens, la destination du $m$-ième \\
+			 & est l'origine du $m+1$-ième \\
+			\hline 
+			Parcours & Mécanisme de visite successive des liens et sommets d'un graphe \\
+			\hline 
+		\end{tabular}
+		\caption{Concepts utilisés pour le parcours de graphe}
+	\end{table}
+	
+	\section{La notion de cycle}
+	
+	La notion de cycle s'appuie directement sur la définition d'un chemin. Intuitivement, un cycle est un itinéraire qui se referme sur lui-même, c'est-à-dire dont le sommet de destination est identique au sommet d'origine.
+	
+	\begin{definition}
+		Dans un graphe orienté $G = (S,L)$, on appelle \textbf{cycle de longueur $n$} partant d'un sommet $s$, un chemin $c \in C_n(s)$ dont la destination finale est le sommet de départ $s$. 
+		
+		Formellement, il s'agit d'une suite de $n$ liens $(l_1, l_2, \dots, l_n)$ telle que :
+		\begin{itemize}
+			\item $\sigma(l_1) = s$ (le chemin commence en $s$).
+			\item Pour tout $1 \leq i < n$, $\delta(l_i) = \sigma(l_{i+1})$ (le chemin est continu).
+			\item $\delta(l_n) = s$ (le dernier lien retourne au point de départ).
+		\end{itemize}
+	\end{definition}
+	
+	Il est important de distinguer plusieurs types de cycles pour qualifier la topologie d'un graphe :
+	\begin{itemize}
+		\item \textbf{La boucle (cycle de longueur 1)} : Il s'agit d'un lien unique $l$ tel que $\sigma(l) = \delta(l)$. C'est le cycle le plus trivial, souvent exclu des graphes dits \og{}simples\fg{}.
+		\item \textbf{Le cycle élémentaire} : C'est un cycle où, à l'exception du sommet de départ et d'arrivée, on ne visite aucun sommet plus d'une fois. Autrement dit, tous les sommets intermédiaires traversés sont deux à deux distincts.
+	\end{itemize}
+	
+	\paragraph{Les cycles dans les parcours de graphes} Le concept de cycle est fondamental lors d'un parcours. Si, lors de la construction des frontières successives $E_n(F)$, on atteint un sommet qui appartient déjà à une frontière précédente $E_k(F)$ avec $k < n$, cela démontre l'existence d'un cycle dans le graphe. C'est pourquoi les algorithmes informatiques de parcours gardent généralement en mémoire l'ensemble des sommets déjà visités pour éviter de tourner en rond de manière infinie.
+
+
+	\section{La notion de degré}
+	
+	Prenons $O=(S,L)$ un graphe orienté. On peut donc, pour un nœud $s \in S$, compter le nombre de liens entrants et sortants. 
+	
+	\begin{definition}
+		Pour un graphe non orienté, le degré d'un sommet est le nombre de liens passant par ce sommet. Pour un graphe orienté, on distingue le degré entrant (nombre de liens ayant ce sommet comme destination) du degré sortant (nombre de liens ayant ce sommet comme source). 
+	\end{definition}
+	
+	Un attracteur dans un graphe est une notion qui exprime qu'un sommet a un très fort degré entrant et un très faible degré sortant. Autrement dit, il est \og{}très facile\fg{} de trouver un chemin vers ce noeud mais très rare d'avoir un chemin sortant. 
+	
+	\section{La notion de DAG}
+	
+	L'absence totale de cycle confère à un graphe orienté des propriétés structurelles remarquables. On parle alors de \textbf{DAG} (acronyme de l'anglais \textit{Directed Acyclic Graph}, ou \textbf{graphe orienté acyclique}).
+	
+	\begin{definition}
+		Un graphe orienté $G = (S, L)$ est dit \textbf{acyclique} s'il ne contient aucun cycle, c'est-à-dire s'il n'existe aucun sommet $s \in S$ et aucun entier $n \geq 1$ pour lesquels il existe un chemin $c \in C_n(s)$ vérifiant $\text{destination}(c) = s$.
+	\end{definition}
+	
+	Dans un DAG fini et non vide, on a la garantie qu'il existe toujours au moins un sommet sans lien entrant ($\text{degré entrant} = 0$, appelé une \textbf{source}) et au moins un sommet sans lien sortant ($\text{degré sortant} = 0$, appelé un \textbf{puits}). 
+	
+	\subsection*{Le tri topologique et l'ordonnancement}
+	
+	La propriété maîtresse des DAG est qu'ils induisent une relation d'ordre partiel sur les sommets. Il est donc toujours possible d'établir un \textbf{tri topologique} : une disposition linéaire des sommets sous la forme d'une séquence $(s_1, s_2, \dots, s_{|S|})$ telle que pour tout lien $l \in L$, l'indice de l'origine est strictement inférieur à l'indice de la destination ($\sigma(l) = s_i$ et $\delta(l) = s_j \implies i < j$).
+	
+	Cette propriété rend les DAG indispensables en informatique, tout particulièrement dans les problématiques d'ordonnancement :
+	
+	\begin{itemize}
+		\item \textbf{Gestion des dépendances et compilation :} Un lien orienté de $a$ vers $b$ peut modéliser la contrainte \og{}$a$ doit être exécuté avant $b$\fg{}. Dans les systèmes de construction logicielle (comme \textit{Make}, \textit{Maven} ou \textit{Cargo}), les bibliothèques et les fichiers sources forment un DAG. L'absence de cycle garantit qu'il n'existe pas d'interblocage (ou dépendance circulaire du type \og{}$a$ a besoin de $b$ qui a besoin de $a$\fg{}).
+		\item \textbf{Pipelines de données et workflows :} Les moteurs de traitement distribué (comme \textit{Apache Spark}, \textit{Airflow} ou les pipelines CI/CD) représentent les étapes de calcul sous forme de DAG. Cela permet de savoir précisément quelles tâches peuvent être parallélisées (les sommets indépendants au même niveau de profondeur) et lesquelles doivent attendre la fin des étapes amont.
+		\item \textbf{Historique et contrôle de versions :} Un graphe d'historique \textit{Git} est un DAG où les commits sont des nœuds pointant vers leurs parents directs. Les fusions (\textit{merges}) créent des convergences sans jamais créer de boucle temporelle.
+	\end{itemize}
+	
+	\vspace{0.5cm}
+	Algorithmiquement, vérifier qu'un graphe est bien un DAG ou en calculer un ordre topologique est très efficace : l'algorithme de Kahn ou un simple parcours en profondeur (DFS) permettent de détecter les cycles ou de produire le tri en temps linéaire $\mathcal{O}(|S| + |L|)$.
+	
+\end{document}
