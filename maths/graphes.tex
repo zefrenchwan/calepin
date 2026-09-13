@@ -5,6 +5,7 @@
 \usepackage[french]{babel}
 \usepackage{amsmath, amssymb, amsthm}
 \usepackage{geometry}
+\usepackage[french,ruled,vlined]{algorithm2e}
 \geometry{margin=2.5cm}
 
 \newtheorem{definition}{Définition}
@@ -25,7 +26,7 @@
 	
 	Si l'on prend les définitions de base, un \textbf{graphe} est un concept qui se décline en trois notions : 
 	\begin{itemize}
-		\item \textbf{son orientation} : si les liens qui le composent ont un sens en plus d'une direction. Un graphe non orienté est par définition la donnée de sommets (formant $S$) et de liens vus comme parties de $S$ à deux éléments, donc les ensembles de type $\{a,b\}$ avec $a \neq b$ (sans boucle) ou $a=b$ (boucle). Les graphes orientés sur $S$ ont comme liens les paires ordonnées $(a,b)$ avec $a \neq b$ (sans boucle) ou $a=b$ (boucle)
+		\item \textbf{son orientation} : si les liens qui le composent ont un sens en plus d'une direction. Un graphe non orienté est par définition la donnée de sommets (formant $S$) et de liens vus comme parties de $S$ à (un ou) deux éléments, donc les ensembles de type $\{a,b\}$ avec $a \neq b$ (sans boucle) ou $a=b$ (boucle). Les graphes orientés sur $S$ ont comme liens les paires ordonnées $(a,b)$ avec $a \neq b$ (sans boucle) ou $a=b$ (boucle)
 		\item la présence de plusieurs liens de même sommets, qui caractérise les \textbf{multigraphes}. Dans ce cas, le lien reliant $a$ et $b$ peut exister en plusieurs exemplaires. Une formalisation passe par un index, par exemple $(a,b,0)$ et $(a,b,1)$ sont deux liens, différents par leur index
 		\item la \textbf{valuation} des liens. On se donne alors un troisième ensemble $V$ et une fonction associant à un lien $l$ une valeur $v(l) \in V$. 
 	\end{itemize}
@@ -110,8 +111,6 @@
 		\item \textbf{Le cycle élémentaire} : C'est un cycle où, à l'exception du sommet de départ et d'arrivée, on ne visite aucun sommet plus d'une fois. Autrement dit, tous les sommets intermédiaires traversés sont deux à deux distincts.
 	\end{itemize}
 	
-	\paragraph{Les cycles dans les parcours de graphes} Le concept de cycle est fondamental lors d'un parcours. Si, lors de la construction des frontières successives $E_n(F)$, on atteint un sommet qui appartient déjà à une frontière précédente $E_k(F)$ avec $k < n$, cela démontre l'existence d'un cycle dans le graphe. C'est pourquoi les algorithmes informatiques de parcours gardent généralement en mémoire l'ensemble des sommets déjà visités pour éviter de tourner en rond de manière infinie.
-
 
 	\section{La notion de degré}
 	
@@ -128,7 +127,7 @@
 	L'absence totale de cycle confère à un graphe orienté des propriétés structurelles remarquables. On parle alors de \textbf{DAG} (acronyme de l'anglais \textit{Directed Acyclic Graph}, ou \textbf{graphe orienté acyclique}).
 	
 	\begin{definition}
-		Un graphe orienté $G = (S, L)$ est dit \textbf{acyclique} s'il ne contient aucun cycle, c'est-à-dire s'il n'existe aucun sommet $s \in S$ et aucun entier $n \geq 1$ pour lesquels il existe un chemin $c \in C_n(s)$ vérifiant $\text{destination}(c) = s$.
+		Un graphe orienté $G = (S, L)$ est dit \textbf{acyclique} s'il ne contient aucun cycle. C'est alors un DAG (directed acyclic graph). 
 	\end{definition}
 	
 	Dans un DAG fini et non vide, on a la garantie qu'il existe toujours au moins un sommet sans lien entrant ($\text{degré entrant} = 0$, appelé une \textbf{source}) et au moins un sommet sans lien sortant ($\text{degré sortant} = 0$, appelé un \textbf{puits}). 
@@ -147,5 +146,143 @@
 	
 	\vspace{0.5cm}
 	Algorithmiquement, vérifier qu'un graphe est bien un DAG ou en calculer un ordre topologique est très efficace : l'algorithme de Kahn ou un simple parcours en profondeur (DFS) permettent de détecter les cycles ou de produire le tri en temps linéaire $\mathcal{O}(|S| + |L|)$.
+	
+	
+	\section{Le parcours en largeur (BFS)}
+	
+	Le parcours en largeur, souvent désigné par son acronyme BFS (\textit{Breadth-First Search}), correspond à l'exploration systématique du graphe en matérialisant les frontières successives $E_n(F)$ introduites précédemment. À partir d'un sommet source $s$ (où l'on fixe $F = \{s\}$), l'algorithme visite l'ensemble des sommets à distance 1, puis à distance 2, et ainsi de suite.
+	
+	Pour gérer l'ordre des sommets en attente d'exploration, le parcours en largeur s'appuie sur une structure de données de type FIFO. Lorsqu'un sommet est extrait de la file pour être traité, l'ensemble de ses destinations non encore découvertes (son voisinage sortant) est ajouté en fin de file.
+	
+	\paragraph{L'invariant du BFS}
+	L'exactitude de cet algorithme repose sur l'invariant structurel suivant : à tout instant de l'exécution, si l'algorithme traite un sommet situé à une distance $n$ de la source, la structure FIFO contient exclusivement des sommets situés à une distance $n$ et, éventuellement, des sommets nouvellement découverts à une distance $n+1$.
+	
+	La conséquence directe de cet invariant est remarquable : au moment exact où le dernier nœud de distance $n$ est traité et retiré de la file FIFO, on possède la certitude absolue de connaître \textbf{la totalité} des sommets du graphe situés à cette distance de la source. C'est cette complétude, garantie niveau par niveau, qui fait du BFS la méthode de référence pour déterminer le plus court chemin (en nombre de liens) dans un graphe non valué.
+	
+	\section{Le parcours en profondeur (DFS)}
+	
+	À l'inverse de la logique concentrique du BFS, le parcours en profondeur (ou DFS pour \textit{Depth-First Search}) adopte une stratégie d'exploration longitudinale. L'objectif est de s'enfoncer le plus loin possible le long d'un chemin. Ce n'est que lorsque l'algorithme atteint un sommet dont tous les voisins ont déjà été visités (un \og{}cul-de-sac\fg{}) qu'il effectue un retour en arrière (\textit{backtracking}) pour explorer les ramifications ignorées jusqu'alors.
+	
+	Cette mécanique est implémentée au moyen d'une structure de type LIFO, gérée de manière explicite, ou implicite via la pile d'appels si l'algorithme est rédigé sous forme récursive. 
+	
+	\paragraph{L'invariant du DFS}
+	Si la puissance du BFS réside dans la découverte initiale des sommets, toute la richesse conceptuelle du DFS s'observe au moment de la \textbf{post-visite}, c'est-à-dire l'instant précis où un sommet sort définitivement de la structure LIFO.
+	
+	L'invariant du parcours s'énonce ainsi : au moment du \textit{retour} sur un nœud, on a la garantie absolue d'avoir exploré et cartographié \textbf{l'intégralité de sa descendance accessible}. 
+	
+	Puisque l'algorithme ne dépile un sommet que lorsque tous ses liens sortants et les sous-graphes correspondants ont été épuisés, on peut compter les liens explorés ou lui attribuer des métriques de clôture en ayant la certitude d'une vue exhaustive sur cette branche. C'est sur cet invariant précis que repose le tri topologique abordé plus tôt (où les sommets sont ordonnés par date de retour décroissante) ou les algorithmes de détection des composantes fortement connexes.
+	
+	\section{L'algorithme de Dijkstra}
+	
+	Le parcours en largeur simple est inopérant pour trouver des chemins optimaux dans les graphes valués $G=(S,L)$ dès lors que le chemin minimisant le nombre de sauts ne minimise plus nécessairement la somme des valuations. L'algorithme de Dijkstra résout ce problème, sous le postulat strict que l'ensemble des valuations permises $V$ est inclus dans $\mathbb{R}^+$ (les poids sont \textbf{positifs ou nuls}).
+	
+	\subsection{Ce que fait l'algorithme}
+	
+	\begin{algorithm}[htbp]
+		\DontPrintSemicolon
+		\KwData{Un graphe orienté valué $G=(S,L)$, un sommet source $s_{0} \in S$}
+		\KwResult{Les tableaux \textit{distance} et \textit{predecesseur}}
+		\BlankLine
+		
+		\tcp{1. INITIALISATION}
+		\For{chaque sommet $s \in S$}{
+			$distance[s] \leftarrow \infty$\;
+			$predecesseur[s] \leftarrow \text{Nul}$\;
+		}
+		$distance[s_{0}] \leftarrow 0$\;
+		$Q \leftarrow$ CréerFilePriorite($S$, ordonnés par $distance$)\;
+		\BlankLine
+		
+		\tcp{2. BOUCLE PRINCIPALE}
+		\While{$Q$ n'est pas vide}{
+			$u \leftarrow$ ExtraireMinimum($Q$) \tcp*{Stratégie gloutonne}
+			
+			\tcp{Optimisation : si distance infinie, le reste est inaccessible}
+			\If{$distance[u] = \infty$}{
+				\textbf{arrêter l'algorithme}\;
+			}
+			\BlankLine
+			
+			\tcp{3. RELÂCHEMENT (Exploration du voisinage)}
+			\For{chaque lien $l$ allant de $u$ vers un voisin $z$}{
+				$poids \leftarrow v(l)$ \tcp*{Où v(l) est la valuation du lien}
+				$nouvelle\_dist \leftarrow distance[u] + poids$\;
+				
+				\If{$nouvelle\_dist < distance[z]$}{
+					$distance[z] \leftarrow nouvelle\_dist$\;
+					$predecesseur[z] \leftarrow u$\;
+					MettreAJourPriorite($Q, z, nouvelle\_dist$)\;
+				}
+			}
+		}
+		\BlankLine
+		
+		\Return{($distance$, $predecesseur$)}\;
+		\caption{Algorithme de Dijkstra}
+	\end{algorithm}
+	
+	L'algorithme calcule l'arborescence des plus courts chemins (au sens de la somme des valuations) depuis un sommet source vers tous les sommets accessibles du graphe. 
+	
+	Pour ce faire, il maintient pour chaque sommet une estimation de la distance minimale pour l'atteindre. Cette estimation est initialisée à zéro pour la source et à l'infini pour tous les autres sommets. De manière itérative, parmi l'ensemble des sommets non encore \og{}validés\fg{}, l'algorithme sélectionne systématiquement le sommet dont l'estimation de distance est minimale. Ce sommet est alors définitivement validé. 
+	
+	L'algorithme explore ensuite le voisinage de ce sommet : pour chaque lien sortant, il vérifie si le fait de passer par le sommet tout juste validé permet d'obtenir un chemin total moins coûteux vers la destination. Si tel est le cas, l'estimation de distance du sommet destination est mise à jour à la baisse. C'est l'opération de \textit{relâchement}.
+	
+	\subsection{Pourquoi ça marche}
+	L'exactitude de la méthode de Dijkstra s'appuie sur une logique gloutonne validée par l'invariant : \textbf{au moment précis où un sommet est sélectionné pour être validé, l'estimation courante de sa distance est toujours sa distance minimale définitive}.
+	
+	La justification de cet invariant repose entièrement sur la positivité des valuations des liens. Supposons qu'il existe un raccourci inconnu vers le sommet $x$ fraîchement sélectionné, et que ce raccourci passe par un autre sommet $y$ non encore validé. Étant donné que $x$ a été choisi pour être le sommet non validé le plus \og{}proche\fg{} de la source, la distance accumulée jusqu'à $y$ est déjà supérieure ou égale à celle de $x$. Dans la mesure où les liens ont une valeur positive ou nulle, prolonger un chemin depuis $y$ vers $x$ ne pourra qu'augmenter (ou au mieux maintenir) le coût total. Il est donc mathématiquement impossible de découvrir ultérieurement un chemin strictement plus avantageux vers $x$.
+	
+	\subsection{La preuve de l'invariant de l'algorithme de Dijkstra}
+	
+	\textbf{Postulat préalable :} L'ensemble des valuations permises $V$ est inclus dans $\mathbb{R}^+$ (les poids de tous les arcs sont positifs ou nuls).
+	
+	\textbf{Énoncé de l'invariant :} Au moment précis où un sommet est sélectionné par l'algorithme (extrait de la file de priorité) pour être validé, l'estimation courante de sa distance depuis le sommet source est toujours sa distance minimale définitive.
+	
+	\vspace{0.5cm}
+	\noindent\textbf{Démonstration.}
+	La démonstration repose sur une logique gloutonne et s'établit par l'absurde.
+	
+	Soit $s_0$ le sommet source.
+	À chaque étape, l'algorithme sélectionne un sommet $x$ non encore validé dont la distance estimée $d(x)$ est minimale parmi tous les sommets non validés.
+	
+	Supposons, par l'absurde, que l'estimation courante $d(x)$ ne soit pas la distance minimale définitive. Cela signifie qu'il existe un chemin inconnu (un \og{}raccourci\fg{}) depuis la source $s_0$ vers $x$ dont le coût total est strictement inférieur à $d(x)$.
+	
+	Puisque l'algorithme procède par exploration de proche en proche depuis $s_0$, ce chemin optimal hypothétique doit nécessairement quitter l'ensemble des sommets déjà validés pour passer par un sommet non encore validé. 
+	Soit $y$ le premier sommet non encore validé rencontré sur ce chemin optimal vers $x$.
+	
+	Puisque $y$ n'a pas encore été validé, au moment du choix de $x$, le sommet $y$ était présent dans la file d'attente (ou accessible par les sommets déjà validés). Le choix glouton de l'algorithme, qui sélectionne le minimum, nous assure que :
+	\begin{equation}
+		d(x) \leq d(y)
+	\end{equation}
+	
+	De plus, la distance réelle de $s_0$ à $x$ en passant par ce chemin optimal peut s'écrire comme la distance pour atteindre $y$, plus le coût du chemin restant de $y$ à $x$. Appelons $c(y \leadsto x)$ le coût de ce segment restant. 
+	Puisque toutes les valuations des liens sont positives ou nulles (postulat de départ $V \subset \mathbb{R}^+$), on a nécessairement :
+	\begin{equation}
+		c(y \leadsto x) \geq 0
+	\end{equation}
+	
+	Par conséquent, le coût total pour atteindre $x$ via $y$ est :
+	\begin{equation}
+		d(y) + c(y \leadsto x) \geq d(y)
+	\end{equation}
+	
+	En combinant (1) et (3), on obtient :
+	\begin{equation}
+		d(y) + c(y \leadsto x) \geq d(x)
+	\end{equation}
+	
+	Le coût du chemin passant par $y$ est donc au moins égal à l'estimation $d(x)$. Il est mathématiquement impossible que ce chemin via $y$ constitue un raccourci strictement plus avantageux vers $x$.
+	
+	Ceci contredit notre hypothèse de départ. L'estimation $d(x)$ au moment de la sélection de $x$ est donc bien la distance minimale définitive. 
+	\hfill $\blacksquare$
+	
+	
+	\subsection{La gestion des cycles}
+	La présence de cycles pose souvent problème dans les parcours de graphes en créant des boucles d'exploration infinies. L'algorithme de Dijkstra s'en prémunit de manière intrinsèque, sans nécessiter de structure de contrôle annexe, grâce à son mécanisme d'optimisation stricte.
+	
+	Si un chemin repasse par un sommet déjà rencontré (formant ainsi un cycle), la somme des valuations du chemin aura nécessairement augmenté (ou stagné dans le cas exceptionnel d'un cycle de poids nul). Or, lors du relâchement, l'algorithme ne met à jour l'estimation d'un sommet et n'y relance une exploration que si la nouvelle distance calculée est \textbf{strictement inférieure} à la meilleure distance connue. 
+	
+	Le coût supplémentaire engendré par le parcours d'un cycle sera donc systématiquement refusé par la condition de mise à jour. La branche cyclique est alors ignorée au moment du test, éteignant de fait toute possibilité de boucle d'exploration infinie.
+	
 	
 \end{document}
